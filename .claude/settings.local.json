@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version; \\(Get-Command pnpm -ErrorAction SilentlyContinue\\).Source; \\(Get-Command npm -ErrorAction SilentlyContinue\\).Source)",
+      "Bash(dir /s \"C:\\\\Users\\\\shale\\\\Desktop\\\\ClaudeCoding\\\\tts new prject 0.2\")"
+    ]
+  }
+}

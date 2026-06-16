@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.next/
+out/
+build/
+
+# Prisma
+apps/api/prisma/migrations/dev.db*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Uploads / generated audio
+uploads/
+apps/api/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Google credentials
+gcp-credentials.json
+*-credentials.json
+
+# Misc
+coverage/
+.turbo/

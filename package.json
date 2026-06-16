@@ -1,0 +1,31 @@
+{
+  "name": "doc-to-audio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Convert documents to audio — a pnpm monorepo (Next.js + Fastify + Prisma + BullMQ)",
+  "scripts": {
+    "dev": "pnpm --filter @doc-to-audio/types build && pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm --filter @doc-to-audio/types build && pnpm --filter \"./apps/*\" build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @doc-to-audio/api db:generate",
+    "db:migrate": "pnpm --filter @doc-to-audio/api db:migrate",
+    "db:push": "pnpm --filter @doc-to-audio/api db:push",
+    "api:dev": "pnpm --filter @doc-to-audio/api dev",
+    "api:worker": "pnpm --filter @doc-to-audio/api worker",
+    "web:dev": "pnpm --filter @doc-to-audio/web dev"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  },
+  "packageManager": "pnpm@9.7.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "ioredis": "5.11.1"
+    }
+  }
+}

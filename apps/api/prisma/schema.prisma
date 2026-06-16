@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  folders      Folder[]
+  files        File[]
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  parentId  String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  files     File[]
+  createdAt DateTime @default(now())
+}
+
+model File {
+  id        String     @id @default(cuid())
+  name      String
+  path      String
+  mimeType  String
+  status    FileStatus @default(PENDING)
+  userId    String
+  folderId  String?
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder    Folder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  audioJob  AudioJob?
+  createdAt DateTime   @default(now())
+}
+
+model AudioJob {
+  id           String   @id @default(cuid())
+  fileId       String   @unique
+  audioPath    String?
+  duration     Float?
+  progress     Int      @default(0)
+  lastPosition Float    @default(0)
+  file         File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum FileStatus {
+  PENDING
+  PROCESSING
+  DONE
+  ERROR
+}
