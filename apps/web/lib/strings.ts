@@ -62,6 +62,8 @@ export const he = {
     provider: "מנוע",
     providerGemini: "Gemini",
     providerAzure: "Azure",
+    multiColumn: "פריסת רב-טורים",
+    multiColumnHint: "סדר מחדש עמודים בעלי שני טורים (עיתונים) לפני ההקראה",
     share: "שיתוף",
     shareCopied: "קישור הועתק!",
     restart: "הפעל מחדש",

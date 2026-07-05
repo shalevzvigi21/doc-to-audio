@@ -110,6 +110,8 @@ export interface CreateJobBody {
   fileId: string;
   /** Defaults to "gemini" when omitted. */
   provider?: TtsProvider;
+  /** Reorder multi-column (newspaper) layouts before TTS. Defaults to false. */
+  reconstructColumns?: boolean;
 }
 
 export interface CreateJobResponse {
@@ -121,6 +123,8 @@ export interface CreateJobResponse {
 export interface JobStatusResponse {
   id: string;
   fileId: string;
+  fileName: string;
+  mimeType: string;
   status: FileStatus;
   audioPath: string | null;
   duration: number | null;

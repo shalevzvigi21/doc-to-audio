@@ -8,6 +8,8 @@ export interface ConversionJobData {
   userId: string;
   /** Which TTS engine to use. Older queued jobs without this default to gemini. */
   provider?: TtsProvider;
+  /** Reorder multi-column (newspaper) layouts via Gemini before TTS. Defaults to false. */
+  reconstructColumns?: boolean;
 }
 
 /**

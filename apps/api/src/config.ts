@@ -26,6 +26,8 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional().default(""),
   /** Comma-separated list of Gemini API keys to rotate through when one exhausts its daily quota. */
   GEMINI_API_KEYS: z.string().optional().default(""),
+  /** Gemini text model for multi-column OCR reconstruction. Override if the default slug is unavailable. */
+  GEMINI_TEXT_MODEL: z.string().optional().default("gemini-3.1-pro"),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().default(""),
   // Azure Speech (optional alternative TTS provider). Both key + region are
   // required to enable it; voice defaults to a Hebrew neural voice.
@@ -68,6 +70,7 @@ export const config = {
   jwtExpiresIn: env.JWT_EXPIRES_IN,
   geminiApiKey: geminiApiKeys[0] ?? "",
   geminiApiKeys,
+  geminiTextModel: env.GEMINI_TEXT_MODEL,
   googleCredentials: env.GOOGLE_APPLICATION_CREDENTIALS,
   azureSpeechKey: env.AZURE_SPEECH_KEY,
   azureSpeechRegion: env.AZURE_SPEECH_REGION,

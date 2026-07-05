@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowRight, BookOpen, Headphones } from "lucide-react";
+import { ArrowRight, BookOpen, FileText, Headphones } from "lucide-react";
 import type { JobStatusResponse } from "@doc-to-audio/types";
 import { apiFetch, ApiError } from "@/lib/api";
 import { PlayerView } from "@/components/PlayerView";
@@ -21,6 +21,8 @@ export default async function PlayerPage({ params }: { params: { jobId: string }
     throw err;
   }
 
+  const isPdf = job.mimeType === "application/pdf";
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -40,18 +42,22 @@ export default async function PlayerPage({ params }: { params: { jobId: string }
         </div>
       </header>
 
-      {/* Hero band */}
+      {/* Hero band — shows the actual document name */}
       <div className="border-b bg-primary/5 py-8">
         <div className="container flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 shadow-inner">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/15 shadow-inner">
             <Headphones className="h-8 w-8 text-primary" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
               {he.player.nowPlaying}
             </p>
-            <p className="text-lg font-semibold text-foreground">
-              {he.player.nowPlayingDescription}
+            <p
+              className="truncate text-lg font-semibold text-foreground"
+              dir="auto"
+              title={job.fileName}
+            >
+              {job.fileName}
             </p>
           </div>
         </div>
@@ -59,8 +65,31 @@ export default async function PlayerPage({ params }: { params: { jobId: string }
 
       {/* Player card */}
       <main className="container py-10">
-        <div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 shadow-lg">
-          <PlayerView initial={job} />
+        <div className="mx-auto max-w-2xl space-y-6">
+          <div className="rounded-2xl border bg-card p-8 shadow-lg">
+            <PlayerView initial={job} />
+          </div>
+
+          {/* Collapsible document viewer */}
+          <details className="group rounded-2xl border bg-card shadow-lg">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-6 py-4 text-sm font-medium select-none">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              {he.player.viewDoc}
+            </summary>
+            <div className="border-t px-4 pb-4 pt-3">
+              {isPdf ? (
+                <iframe
+                  src={`/api/files/${job.fileId}`}
+                  className="h-[70vh] w-full rounded-lg border-0"
+                  title={job.fileName}
+                />
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {he.player.viewDocUnsupported}
+                </p>
+              )}
+            </div>
+          </details>
         </div>
       </main>
     </div>

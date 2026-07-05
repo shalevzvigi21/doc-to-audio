@@ -137,12 +137,13 @@ export async function deleteFolderAction(folderId: string): Promise<ActionResult
 export async function createJobAction(
   fileId: string,
   provider: TtsProvider = "gemini",
+  reconstructColumns = false,
 ): Promise<ActionResult> {
   let job: CreateJobResponse;
   try {
     job = await apiFetch<CreateJobResponse>("/jobs", {
       method: "POST",
-      body: JSON.stringify({ fileId, provider }),
+      body: JSON.stringify({ fileId, provider, reconstructColumns }),
     });
   } catch (err) {
     return { error: err instanceof ApiError ? err.message : "Could not start conversion" };
@@ -158,11 +159,12 @@ export async function createJobAction(
 export async function queueFileAction(
   fileId: string,
   provider: TtsProvider = "gemini",
+  reconstructColumns = false,
 ): Promise<ActionResult> {
   try {
     await apiFetch("/jobs", {
       method: "POST",
-      body: JSON.stringify({ fileId, provider }),
+      body: JSON.stringify({ fileId, provider, reconstructColumns }),
     });
   } catch (err) {
     return { error: err instanceof ApiError ? err.message : "Could not start conversion" };
@@ -178,11 +180,12 @@ export async function queueFileAction(
 export async function convertFilesAction(
   fileIds: string[],
   provider: TtsProvider = "gemini",
+  reconstructColumns = false,
 ): Promise<{ queued: number; failed: number }> {
   let queued = 0;
   let failed = 0;
   for (const fileId of fileIds) {
-    const result = await queueFileAction(fileId, provider);
+    const result = await queueFileAction(fileId, provider, reconstructColumns);
     if (result.success) queued++;
     else failed++;
   }

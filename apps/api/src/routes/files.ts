@@ -1,4 +1,4 @@
-import { createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { mkdir, unlink, rm } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -154,10 +154,11 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
     const userDir = path.join(config.uploadDir, user.id);
     await mkdir(userDir, { recursive: true });
 
-    // Prefix with a timestamp to avoid collisions while keeping the original name.
-    // Allow any Unicode letter/digit (incl. Hebrew) — only strip characters that
-    // are unsafe in a path. (path.basename already removed separators.)
-    const safeName = path.basename(data.filename).replace(/[^\p{L}\p{N}._\-() ]/gu, "_");
+    // Read the display name from the query string (percent-encoded UTF-8).
+    // This is more reliable than multipart field parsing for non-ASCII filenames.
+    const queryName = (request.query as { displayName?: string }).displayName ?? "";
+    const rawName = queryName.trim() || data.filename || "upload";
+    const safeName = path.basename(rawName).replace(/[^\p{L}\p{N}._\-() ]/gu, "_");
     const storedName = `${Date.now()}-${safeName}`;
     const absolutePath = path.join(userDir, storedName);
 
@@ -232,6 +233,22 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return reply.send({ file: serializeFile(updated as DbFile) });
+  });
+
+  /** GET /files/:id/source — stream the original uploaded document (authenticated). */
+  fastify.get<{ Params: { id: string } }>("/files/:id/source", async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+
+    const file = await prisma.file.findFirst({
+      where: { id: request.params.id, userId: user.id },
+    });
+    if (!file) return notFound(reply, "File not found");
+    if (!existsSync(file.path)) return notFound(reply, "File not on disk");
+
+    reply.header("Content-Type", file.mimeType || "application/octet-stream");
+    reply.header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    return reply.send(createReadStream(file.path));
   });
 
   /** DELETE /files/:id — remove the file, its audio job, and on-disk assets. */

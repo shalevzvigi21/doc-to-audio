@@ -4,7 +4,8 @@ import { connection } from "../lib/redis.js";
 import { prisma } from "../lib/prisma.js";
 import { config, CONVERSION_QUEUE_NAME } from "../config.js";
 import type { ConversionJobData } from "../queue/conversionQueue.js";
-import { extractText } from "../services/ocr.service.js";
+import { extractTextPages } from "../services/ocr.service.js";
+import { reconstructPageColumns } from "../services/text-reconstruction.service.js";
 import { cleanTextForReading } from "../services/text-cleaner.service.js";
 import { synthesizeGemini, DailyQuotaError } from "../services/tts.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
@@ -20,7 +21,7 @@ import { synthesizeAzure } from "../services/azure-tts.service.js";
  * the error is re-thrown so BullMQ can retry.
  */
 async function processConversion(job: Job<ConversionJobData>): Promise<void> {
-  const { fileId, userId, provider = "gemini" } = job.data;
+  const { fileId, userId, provider = "gemini", reconstructColumns = false } = job.data;
 
   const file = await prisma.file.findUnique({ where: { id: fileId } });
   if (!file) {
@@ -40,8 +41,26 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
   try {
     await setProgress(0);
 
-    // OCR occupies 0–70% of the bar...
-    const rawText = await extractText(file.path, (f) => setProgress(f * 70));
+    // OCR occupies 0–60% (with reconstruction) or 0–70% (without) of the bar.
+    const ocrCeiling = reconstructColumns ? 60 : 70;
+    const pages = await extractTextPages(file.path, (f) => setProgress(f * ocrCeiling));
+
+    // Optionally reorder multi-column layouts (60–70%). Reconstruction is an
+    // enhancement — on any failure (block, quota, error) fall back to the raw
+    // OCR text so the conversion still produces audio.
+    let rawText: string;
+    if (reconstructColumns) {
+      try {
+        const reconstructed = await reconstructPageColumns(pages, (f) => setProgress(60 + f * 10));
+        rawText = reconstructed.join("\n\n");
+      } catch (err) {
+        console.warn(`[conversion] column reconstruction failed for ${fileId} — using raw OCR:`, err);
+        rawText = pages.join("\n\n");
+      }
+    } else {
+      rawText = pages.join("\n\n");
+    }
+
     if (!rawText || rawText.trim().length === 0) {
       throw new Error("No text could be extracted from the document");
     }

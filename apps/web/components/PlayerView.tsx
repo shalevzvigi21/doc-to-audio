@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, BookOpen, Clock, Loader2, Mic2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, BookOpen, Clock, Loader2, Mic2, RotateCcw } from "lucide-react";
 import type { JobStatusResponse } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
 import { AudioPlayer } from "@/components/AudioPlayer";
+import { queueFileAction } from "@/lib/actions/library";
 import { he } from "@/lib/strings";
 
 interface PlayerViewProps {
@@ -15,6 +16,12 @@ interface PlayerViewProps {
 export function PlayerView({ initial }: PlayerViewProps) {
   const router = useRouter();
   const [job, setJob] = useState<JobStatusResponse>(initial);
+  const [isStuck, setIsStuck] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+
+  // Track when progress last changed to detect a stuck job.
+  const lastProgressRef = useRef(initial.progress);
+  const lastProgressAtRef = useRef(Date.now());
 
   useEffect(() => {
     if (job.status === "DONE" || job.status === "ERROR") return;
@@ -24,13 +31,33 @@ export function PlayerView({ initial }: PlayerViewProps) {
         if (!res.ok) return;
         const next = (await res.json()) as JobStatusResponse;
         setJob(next);
-        if (next.status === "DONE" || next.status === "ERROR") clearInterval(interval);
+        if (next.status === "DONE" || next.status === "ERROR") {
+          clearInterval(interval);
+          return;
+        }
+        if (next.progress !== lastProgressRef.current) {
+          lastProgressRef.current = next.progress;
+          lastProgressAtRef.current = Date.now();
+          setIsStuck(false);
+        } else if (Date.now() - lastProgressAtRef.current > 40_000) {
+          setIsStuck(true);
+        }
       } catch {
         /* keep polling */
       }
     }, 2000);
     return () => clearInterval(interval);
   }, [job.id, job.status]);
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    await queueFileAction(job.fileId);
+    setJob((prev) => ({ ...prev, status: "PENDING", progress: 0 }));
+    lastProgressRef.current = 0;
+    lastProgressAtRef.current = Date.now();
+    setIsStuck(false);
+    setRestarting(false);
+  };
 
   if (job.status === "ERROR") {
     return (
@@ -46,8 +73,9 @@ export function PlayerView({ initial }: PlayerViewProps) {
           <Button variant="outline" onClick={() => router.push("/library")}>
             {he.player.backToLibrary}
           </Button>
-          <Button onClick={() => router.refresh()}>
-            {he.file.retry}
+          <Button onClick={handleRestart} disabled={restarting}>
+            {restarting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            {he.player.restart}
           </Button>
         </div>
       </div>
@@ -71,12 +99,18 @@ export function PlayerView({ initial }: PlayerViewProps) {
         </div>
 
         <div>
-          <h2 className="text-lg font-semibold">
+          <h2 className="flex flex-wrap items-center justify-center gap-2 text-lg font-semibold">
             {job.status === "PROCESSING"
               ? isOcr
                 ? "קורא את המסמך…"
                 : he.player.generating
               : he.player.queued}
+            {isStuck && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {he.file.interrupted}
+              </span>
+            )}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">{he.player.autoUpdate}</p>
         </div>
@@ -91,7 +125,10 @@ export function PlayerView({ initial }: PlayerViewProps) {
             aria-valuemax={100}
           >
             <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
+              className={[
+                "h-full rounded-full transition-all duration-500",
+                isStuck ? "bg-amber-400" : "bg-primary",
+              ].join(" ")}
               style={{ width: `${percent}%` }}
             />
           </div>
@@ -103,6 +140,34 @@ export function PlayerView({ initial }: PlayerViewProps) {
             <span className="tabular-nums font-medium">{percent}%</span>
           </div>
         </div>
+
+        {/* Stuck detection banner or subtle restart link */}
+        {isStuck ? (
+          <div className="flex flex-col items-center gap-2 rounded-lg border border-amber-300/50 bg-amber-50/50 px-4 py-3 text-center dark:bg-amber-900/10">
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+              {he.player.stuckHint}
+            </p>
+            <Button size="sm" variant="outline" disabled={restarting} onClick={handleRestart}>
+              {restarting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+              {he.player.restart}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1 text-xs text-muted-foreground"
+            disabled={restarting}
+            onClick={handleRestart}
+          >
+            <RotateCcw className="h-3 w-3" />
+            {he.player.restart}
+          </Button>
+        )}
       </div>
     );
   }

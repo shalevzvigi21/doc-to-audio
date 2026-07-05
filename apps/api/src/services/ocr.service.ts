@@ -91,18 +91,23 @@ function cleanOcrText(text: string): string {
 }
 
 /**
- * Extract text from a document via OCR.
+ * Extract text from a document via OCR, **one cleaned string per page**.
  *
  * 1. PDFs are rasterised page-by-page to PNG (300 DPI); other inputs are
  *    treated as a single image.
  * 2. Each page image is cleaned with sharp (grayscale/normalize/threshold).
  * 3. Tesseract recognises Hebrew + English text per page.
- * 4. All pages are concatenated into one string.
+ * 4. Each page's text is noise-filtered with `cleanOcrText` (line-based, so it
+ *    is safe to apply per page).
+ *
+ * Returning per-page text lets the multi-column reconstruction step operate on
+ * one page at a time (headlines/columns are a per-page phenomenon). Callers
+ * that just want the whole document use `extractText`.
  */
-export async function extractText(
+export async function extractTextPages(
   filePath: string,
   onProgress?: (fraction: number) => void | Promise<void>,
-): Promise<string> {
+): Promise<string[]> {
   const workDir = await mkdtemp(path.join(tmpdir(), "doc2audio-ocr-"));
 
   try {
@@ -133,15 +138,27 @@ export async function extractText(
           const pagePath = path.join(workDir, `clean-${i}.png`);
           await writeFile(pagePath, processed);
           const text = await tesseract.recognize(pagePath, TESSERACT_CONFIG);
-          pageTexts[i] = text.trim();
+          pageTexts[i] = cleanOcrText(text.trim());
           completed++;
           await onProgress?.(completed / pageImages.length);
         }),
       );
     }
 
-    return cleanOcrText(pageTexts.join("\n\n"));
+    return pageTexts;
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+/**
+ * Extract text from a document via OCR as a single concatenated string — the
+ * default path used when multi-column reconstruction is not requested.
+ */
+export async function extractText(
+  filePath: string,
+  onProgress?: (fraction: number) => void | Promise<void>,
+): Promise<string> {
+  const pages = await extractTextPages(filePath, onProgress);
+  return pages.join("\n\n");
 }

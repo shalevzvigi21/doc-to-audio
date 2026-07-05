@@ -46,7 +46,11 @@ export function LibraryToolbar() {
       );
 
       const formData = new FormData();
-      formData.append("file", entries[i].file, entries[i].file.name);
+      // Send the filename as a plain UTF-8 string field BEFORE the file.
+      // Browsers reliably encode string fields as UTF-8; Content-Disposition
+      // filename encoding is inconsistent for non-ASCII (Hebrew) characters.
+      formData.append("displayName", entries[i].file.name);
+      formData.append("file", entries[i].file);
 
       const result: ActionResult = await uploadFileAction({}, formData);
 

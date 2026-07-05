@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import type { FolderNode, FileRecord } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
-import { FileList } from "@/components/FileList";
 import { deleteFolderAction, convertFilesAction } from "@/lib/actions/library";
 import { he } from "@/lib/strings";
 
@@ -65,7 +64,10 @@ function FolderBranch({
       >
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setOpen((v) => !v);
+            document.getElementById(`folder-${node.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
           className="flex min-w-0 flex-1 items-center gap-2 text-start"
         >
           <span className="text-muted-foreground">
@@ -121,32 +123,19 @@ function FolderBranch({
         <p className="px-3 pb-1 text-xs text-primary">{convertMsg}</p>
       )}
 
-      {/* Children */}
-      {open && (
-        <div className="mt-1 space-y-2">
-          {node.files.length > 0 && (
-            <div style={{ paddingInlineStart: `${depth * 14 + 20}px` }}>
-              <FileList
-                files={node.files}
-                allFolders={allFolders}
-                azureAvailable={azureAvailable}
-              />
-            </div>
-          )}
-          {node.children.length > 0 && (
-            <ul className="space-y-0.5">
-              {node.children.map((child) => (
-                <FolderBranch
-                  key={child.id}
-                  node={child}
-                  depth={depth + 1}
-                  allFolders={allFolders}
-                  azureAvailable={azureAvailable}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+      {/* Children — nested folders only; files are rendered in main content */}
+      {open && node.children.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {node.children.map((child) => (
+            <FolderBranch
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              allFolders={allFolders}
+              azureAvailable={azureAvailable}
+            />
+          ))}
+        </ul>
       )}
     </li>
   );

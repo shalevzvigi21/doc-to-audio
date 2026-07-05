@@ -51,6 +51,7 @@ function FileCard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [provider, setProvider] = useState<TtsProvider>("gemini");
+  const [reconstruct, setReconstruct] = useState(false);
   const [liveProgress, setLiveProgress] = useState(file.audioJob?.progress ?? 0);
   const [isCardStuck, setIsCardStuck] = useState(false);
   const lastProgressRef = useRef(file.audioJob?.progress ?? 0);
@@ -116,7 +117,7 @@ function FileCard({
   };
 
   const handleConvert = () => {
-    startTransition(async () => { await createJobAction(file.id, provider); });
+    startTransition(async () => { await createJobAction(file.id, provider, reconstruct); });
   };
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -279,6 +280,20 @@ function FileCard({
                 </select>
               )}
             </div>
+            {/* Multi-column reconstruction toggle */}
+            <label
+              className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
+              title={he.file.multiColumnHint}
+            >
+              <input
+                type="checkbox"
+                checked={reconstruct}
+                disabled={isPending}
+                onChange={(e) => setReconstruct(e.target.checked)}
+                className="h-3.5 w-3.5 cursor-pointer rounded border-input accent-primary disabled:opacity-50"
+              />
+              {he.file.multiColumn}
+            </label>
             <Button
               size="sm"
               className="w-full gap-1.5"

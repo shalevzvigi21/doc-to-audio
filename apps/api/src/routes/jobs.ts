@@ -13,6 +13,7 @@ import { requireUser, notFound, badRequest } from "../lib/http.js";
 const createJobSchema = z.object({
   fileId: z.string().cuid("A valid fileId is required"),
   provider: z.enum(["gemini", "azure"]).optional().default("gemini"),
+  reconstructColumns: z.boolean().optional().default(false),
 });
 
 const positionSchema = z.object({
@@ -30,7 +31,7 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
       return badRequest(reply, parsed.error.issues[0]?.message ?? "Invalid input");
     }
 
-    const { provider } = parsed.data;
+    const { provider, reconstructColumns } = parsed.data;
     if (provider === "azure" && !config.azureConfigured) {
       return badRequest(reply, "Azure TTS is not configured on the server");
     }
@@ -65,7 +66,7 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     // Do NOT pin the BullMQ job to audioJob.id. If the previous job couldn't
     // be removed (stalled/active state), using the same jobId would cause BullMQ
     // to silently drop the add() call, leaving the file stuck in PENDING forever.
-    await conversionQueue.add("convert", { fileId: file.id, userId: user.id, provider });
+    await conversionQueue.add("convert", { fileId: file.id, userId: user.id, provider, reconstructColumns });
 
     const body: CreateJobResponse = {
       jobId: audioJob.id,

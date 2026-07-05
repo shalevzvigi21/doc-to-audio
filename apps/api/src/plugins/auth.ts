@@ -19,7 +19,7 @@ declare module "fastify" {
 }
 
 /** Routes whose path starts with one of these prefixes skip authentication. */
-const PUBLIC_PREFIXES = ["/auth/", "/health"];
+const PUBLIC_PREFIXES = ["/auth/", "/health", "/audio/public/"];
 
 function isPublic(url: string): boolean {
   // Strip query string before matching.

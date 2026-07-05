@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpeg from "fluent-ffmpeg";
 import { config } from "../config.js";
-import { incrementGeminiUsage, markKeyExhausted, getActiveKeyIndex } from "./tts-usage.service.js";
+import {
+  incrementGeminiUsage,
+  markKeyExhausted,
+  getActiveKeyIndex,
+  geminiRateGate,
+} from "./tts-usage.service.js";
 
 /**
  * Text-to-speech via the Gemini API (Google AI Studio key).
@@ -126,7 +131,7 @@ export class DailyQuotaError extends Error {
  * Pull the reset delay (seconds) out of a 429 body. Prefers the machine field
  * `"retryDelay": "27665s"`; falls back to the human "Please retry in 7h41m5s".
  */
-function parseRetrySeconds(body: string): number | null {
+export function parseRetrySeconds(body: string): number | null {
   const machine = /"retryDelay"\s*:\s*"(\d+)s"/i.exec(body);
   if (machine) return Number(machine[1]);
 
@@ -140,29 +145,10 @@ function parseRetrySeconds(body: string): number | null {
   return null;
 }
 
-/**
- * Global request-rate gate. The Gemini free tier allows ~15 TTS requests per
- * minute. The recursive splitter and parallel batches can otherwise burst far
- * past that, triggering a 429 cascade that starves every chunk — including
- * clean Hebrew — so the whole document fails. Spacing every request at least
- * MIN_REQUEST_INTERVAL_MS apart caps the effective rate under the quota no
- * matter how many chunks/splits/retries are in flight. ~4.5s ≈ 13 req/min,
- * just under the 15 RPM cap. The shared `nextRequestAt` cursor serializes
- * request *starts* across all concurrent callers.
- */
-const MIN_REQUEST_INTERVAL_MS = 4500;
-let nextRequestAt = 0;
-async function rateLimitGate(): Promise<void> {
-  const now = Date.now();
-  const startAt = Math.max(now, nextRequestAt);
-  nextRequestAt = startAt + MIN_REQUEST_INTERVAL_MS;
-  const wait = startAt - now;
-  if (wait > 0) await sleep(wait);
-}
-
 /** Issue a single Gemini TTS request and parse out the PCM payload. */
 async function requestChunk(text: string): Promise<GeminiPcm | typeof RATE_LIMITED | null> {
-  await rateLimitGate();
+  // Shared, process-wide gate keeps TTS + reconstruction under the free-tier RPM cap.
+  await geminiRateGate();
 
   // Pick the first API key that still has daily quota. If all keys are
   // exhausted we throw immediately so the worker surfaces a clear error.

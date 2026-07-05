@@ -20,6 +20,29 @@ import { config } from "../config.js";
 /** Free-tier per-day request cap for the Gemini TTS model. */
 export const GEMINI_DAILY_LIMIT = 100;
 
+/**
+ * Global Gemini request-rate gate, shared across every caller (TTS synthesis
+ * AND text reconstruction). The free tier allows ~15 requests per minute; the
+ * recursive TTS splitter, parallel chunk batches, per-page reconstruction, and
+ * concurrent worker jobs can otherwise burst far past that and trigger a 429
+ * cascade. Spacing every request start at least MIN_REQUEST_INTERVAL_MS apart
+ * caps the effective rate under the quota no matter how many callers are in
+ * flight. ~4.5s ≈ 13 req/min, just under the 15 RPM cap. The module-level
+ * `nextRequestAt` cursor serializes request *starts* process-wide.
+ */
+const MIN_REQUEST_INTERVAL_MS = 4500;
+let nextRequestAt = 0;
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Await this before starting any Gemini request to respect the shared RPM cap. */
+export async function geminiRateGate(): Promise<void> {
+  const now = Date.now();
+  const startAt = Math.max(now, nextRequestAt);
+  nextRequestAt = startAt + MIN_REQUEST_INTERVAL_MS;
+  const wait = startAt - now;
+  if (wait > 0) await sleep(wait);
+}
+
 /** Chars per Gemini request (mirrors MAX_CHARS in tts.service). */
 const CHARS_PER_REQUEST = 4800;
 /** Assumed characters on a typical (OCR'd book) page — for the page estimate. */
