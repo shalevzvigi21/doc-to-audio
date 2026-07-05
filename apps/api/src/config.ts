@@ -38,6 +38,12 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   UPLOAD_DIR: z.string().default("./uploads"),
+  // Cloudflare R2 (S3-compatible). All four required to enable R2 storage;
+  // when absent the app falls back to local disk (UPLOAD_DIR).
+  R2_ACCOUNT_ID: z.string().optional().default(""),
+  R2_ACCESS_KEY_ID: z.string().optional().default(""),
+  R2_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  R2_BUCKET: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -81,6 +87,12 @@ export const config = {
   port: env.PORT,
   corsOrigins: env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean),
   uploadDir: env.UPLOAD_DIR,
+  r2AccountId: env.R2_ACCOUNT_ID,
+  r2AccessKeyId: env.R2_ACCESS_KEY_ID,
+  r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY,
+  r2Bucket: env.R2_BUCKET,
+  /** True when all four R2 credentials are present. */
+  r2Configured: Boolean(env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET),
 } as const;
 
 export const CONVERSION_QUEUE_NAME = "conversion";

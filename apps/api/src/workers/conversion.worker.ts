@@ -1,14 +1,18 @@
 import path from "node:path";
+import { rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { Worker, type Job } from "bullmq";
 import { connection } from "../lib/redis.js";
 import { prisma } from "../lib/prisma.js";
-import { config, CONVERSION_QUEUE_NAME } from "../config.js";
+import { CONVERSION_QUEUE_NAME } from "../config.js";
 import type { ConversionJobData } from "../queue/conversionQueue.js";
 import { extractTextPages } from "../services/ocr.service.js";
 import { reconstructPageColumns } from "../services/text-reconstruction.service.js";
 import { cleanTextForReading } from "../services/text-cleaner.service.js";
 import { synthesizeGemini, DailyQuotaError } from "../services/tts.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
+import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
 
 /**
  * Process a single document → audio conversion:
@@ -38,12 +42,20 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
       .catch(() => undefined);
   };
 
+  // Temp paths that must be cleaned up in finally.
+  let localSourcePath: string | null = null;
+  let localMp3Path: string | null = null;
+
   try {
     await setProgress(0);
 
+    // Download source file to local temp so OCR can read it.
+    const ext = path.extname(file.path) || path.extname(file.name) || ".pdf";
+    localSourcePath = await downloadToTemp(file.path, ext);
+
     // OCR occupies 0–60% (with reconstruction) or 0–70% (without) of the bar.
     const ocrCeiling = reconstructColumns ? 60 : 70;
-    const pages = await extractTextPages(file.path, (f) => setProgress(f * ocrCeiling));
+    const pages = await extractTextPages(localSourcePath, (f) => setProgress(f * ocrCeiling));
 
     // Optionally reorder multi-column layouts (60–70%). Reconstruction is an
     // enhancement — on any failure (block, quota, error) fall back to the raw
@@ -72,16 +84,24 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
       throw new Error("No readable text remained after cleaning");
     }
 
-    // ...speech synthesis occupies 70–95%. Dispatch to the chosen TTS engine.
-    const outputPath = path.join(config.uploadDir, userId, "audio", `${fileId}.mp3`);
+    // ...speech synthesis occupies 70–95%. Write MP3 to a local temp file,
+    // then upload it to storage (R2 or local final path).
+    const tmpWorkDir = await mkdtemp(path.join(tmpdir(), "doc2audio-mp3-"));
+    localMp3Path = path.join(tmpWorkDir, `${fileId}.mp3`);
+
     const duration = provider === "azure"
-      ? await synthesizeAzure(text, outputPath, (f) => setProgress(70 + f * 25))
-      : await synthesizeGemini(text, outputPath, (f) => setProgress(70 + f * 25));
+      ? await synthesizeAzure(text, localMp3Path, (f) => setProgress(70 + f * 25))
+      : await synthesizeGemini(text, localMp3Path, (f) => setProgress(70 + f * 25));
+
+    // Upload MP3 to storage and get back the path/key to store in DB.
+    const audioStorageKey = `audio/${userId}/${fileId}.mp3`;
+    const audioPath = await uploadLocalFile(localMp3Path, audioStorageKey, "audio/mpeg");
+    localMp3Path = null; // uploadLocalFile moves the file; nothing left to clean up
 
     await prisma.audioJob.upsert({
       where: { fileId },
-      create: { fileId, audioPath: outputPath, duration, progress: 100 },
-      update: { audioPath: outputPath, duration, progress: 100 },
+      create: { fileId, audioPath, duration, progress: 100 },
+      update: { audioPath, duration, progress: 100 },
     });
 
     await prisma.file.update({ where: { id: fileId }, data: { status: "DONE" } });
@@ -95,14 +115,15 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
       .catch(() => undefined);
     console.error(`[conversion] file ${fileId} failed:`, err);
 
-    // The daily free-tier quota won't recover for hours, so retrying the job
-    // (BullMQ `attempts`) would only re-run OCR and immediately 429 again,
-    // wasting tomorrow's first requests. Swallow it so BullMQ does NOT retry.
     if (err instanceof DailyQuotaError) {
       console.error(`[conversion] daily Gemini quota exhausted — not retrying. ${err.message}`);
       return;
     }
     throw err;
+  } finally {
+    // Clean up any local temp files that weren't consumed by uploadLocalFile.
+    if (localSourcePath) await rm(path.dirname(localSourcePath), { recursive: true, force: true }).catch(() => undefined);
+    if (localMp3Path) await rm(path.dirname(localMp3Path), { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

@@ -1,13 +1,14 @@
-import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { mkdir, unlink, rm } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { FastifyPluginAsync } from "fastify";
 import type { FileTree, FolderNode, FileRecord } from "@doc-to-audio/types";
 import { prisma } from "../lib/prisma.js";
-import { config } from "../config.js";
 import { requireUser, notFound, badRequest } from "../lib/http.js";
+import {
+  saveUploadedFile,
+  getStorageStream,
+  deleteFromStorage,
+} from "../services/storage.service.js";
 
 type DbFile = {
   id: string;
@@ -151,19 +152,22 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const userDir = path.join(config.uploadDir, user.id);
-    await mkdir(userDir, { recursive: true });
-
     // Read the display name from the query string (percent-encoded UTF-8).
     // This is more reliable than multipart field parsing for non-ASCII filenames.
     const queryName = (request.query as { displayName?: string }).displayName ?? "";
     const rawName = queryName.trim() || data.filename || "upload";
     const safeName = path.basename(rawName).replace(/[^\p{L}\p{N}._\-() ]/gu, "_");
     const storedName = `${Date.now()}-${safeName}`;
-    const absolutePath = path.join(userDir, storedName);
 
+    let storedPath: string;
     try {
-      await pipeline(data.file, createWriteStream(absolutePath));
+      const result = await saveUploadedFile(data.file, user.id, storedName, data.mimetype);
+      if (result.truncated) {
+        return reply
+          .code(413)
+          .send({ statusCode: 413, error: "Payload Too Large", message: "File exceeds size limit" });
+      }
+      storedPath = result.storedPath;
     } catch (err) {
       request.log.error(err, "failed writing uploaded file");
       return reply
@@ -171,17 +175,10 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
         .send({ statusCode: 500, error: "Internal Server Error", message: "Upload failed" });
     }
 
-    if (data.file.truncated) {
-      await unlink(absolutePath).catch(() => undefined);
-      return reply
-        .code(413)
-        .send({ statusCode: 413, error: "Payload Too Large", message: "File exceeds size limit" });
-    }
-
     const file = await prisma.file.create({
       data: {
         name: safeName,
-        path: absolutePath,
+        path: storedPath,
         mimeType: data.mimetype,
         userId: user.id,
         folderId,
@@ -244,11 +241,18 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
       where: { id: request.params.id, userId: user.id },
     });
     if (!file) return notFound(reply, "File not found");
-    if (!existsSync(file.path)) return notFound(reply, "File not on disk");
+
+    let streamResult;
+    try {
+      streamResult = await getStorageStream(file.path);
+    } catch {
+      return notFound(reply, "File not found in storage");
+    }
 
     reply.header("Content-Type", file.mimeType || "application/octet-stream");
     reply.header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
-    return reply.send(createReadStream(file.path));
+    reply.header("Content-Length", streamResult.contentLength);
+    return reply.send(streamResult.stream);
   });
 
   /** DELETE /files/:id — remove the file, its audio job, and on-disk assets. */
@@ -262,10 +266,10 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
     });
     if (!file) return notFound(reply, "File not found");
 
-    // Best-effort disk cleanup.
-    await unlink(file.path).catch(() => undefined);
+    // Best-effort storage cleanup.
+    await deleteFromStorage(file.path);
     if (file.audioJob?.audioPath) {
-      await rm(file.audioJob.audioPath, { force: true }).catch(() => undefined);
+      await deleteFromStorage(file.audioJob.audioPath);
     }
 
     // onDelete: Cascade on AudioJob removes the job row with the file.

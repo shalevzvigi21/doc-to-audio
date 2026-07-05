@@ -6,11 +6,6 @@ services:
     dockerfilePath: apps/api/Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    # Persistent disk keeps uploaded PDFs and generated MP3s across deploys.
-    disk:
-      name: uploads
-      mountPath: /data/uploads
-      sizeGB: 10
     envVars:
       - key: NODE_ENV
         value: production
@@ -38,7 +33,15 @@ services:
       - key: CORS_ORIGIN
         sync: false        # Set to your web service URL, e.g. https://doc-to-audio.onrender.com
       - key: UPLOAD_DIR
-        value: /data/uploads
+        value: /tmp/uploads
+      - key: R2_ACCOUNT_ID
+        sync: false        # Cloudflare Account ID
+      - key: R2_ACCESS_KEY_ID
+        sync: false        # R2 API token Access Key ID
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false        # R2 API token Secret Access Key
+      - key: R2_BUCKET
+        sync: false        # R2 bucket name
       - key: WORKER_CONCURRENCY
         value: 2
       - key: AZURE_SPEECH_KEY
