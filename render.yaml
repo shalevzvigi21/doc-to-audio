@@ -65,15 +65,14 @@ services:
       - key: API_INTERNAL_URL
         sync: false        # Internal URL for server→API calls, e.g. https://doc-to-audio-api.onrender.com
 
-# ── Managed databases ──────────────────────────────────────────────────────
-databases:
-  - name: doc-to-audio-db
-    databaseName: doc_to_audio
-    plan: free
-
-# ── Managed Redis ──────────────────────────────────────────────────────────
-services:
+  # ── Redis ──────────────────────────────────────────────────────────────────
   - type: redis
     name: doc-to-audio-redis
     plan: free
     ipAllowList: []
+
+# ── Managed PostgreSQL ─────────────────────────────────────────────────────
+databases:
+  - name: doc-to-audio-db
+    databaseName: doc_to_audio
+    plan: free
