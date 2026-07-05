@@ -36,6 +36,15 @@ const MAX_CHARS = 4800;
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 /**
+ * Prepended to every TTS request to nudge Gemini toward a steady narration
+ * pace. Identical wording on every chunk keeps the instruction deterministic.
+ * The model treats the leading English directive as delivery guidance and does
+ * not speak it aloud in the Hebrew audio.
+ */
+const STYLE_DIRECTIVE =
+  "Read the following text aloud at a slow, steady, even, constant pace, without speeding up or slowing down:\n\n";
+
+/**
  * Split text into chunks of at most `maxChars`, breaking on sentence
  * boundaries. Sentences longer than the limit are hard-split on whitespace.
  */
@@ -152,7 +161,7 @@ async function rateLimitGate(): Promise<void> {
 }
 
 /** Issue a single Gemini TTS request and parse out the PCM payload. */
-async function requestChunk(text: string, voice: string): Promise<GeminiPcm | typeof RATE_LIMITED | null> {
+async function requestChunk(text: string): Promise<GeminiPcm | typeof RATE_LIMITED | null> {
   await rateLimitGate();
 
   // Pick the first API key that still has daily quota. If all keys are
@@ -172,11 +181,11 @@ async function requestChunk(text: string, voice: string): Promise<GeminiPcm | ty
         "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
-        contents: [{ parts: [{ text }] }],
+        contents: [{ parts: [{ text: STYLE_DIRECTIVE + text }] }],
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE_NAME } },
           },
         },
       }),
@@ -197,7 +206,7 @@ async function requestChunk(text: string, voice: string): Promise<GeminiPcm | ty
         console.info(`[tts] key[${keyIndex}] daily quota exhausted — rotating to next key`);
         // Recurse: getActiveKeyIndex() will now skip this key and pick the next.
         // If no key is left, the recursive call throws DailyQuotaError.
-        return requestChunk(text, voice);
+        return requestChunk(text);
       }
       return RATE_LIMITED; // per-minute spike — transient, retry with backoff
     }
@@ -302,10 +311,10 @@ function isSpeakable(text: string): boolean {
  *   - `null` — a genuine content block; the caller can subdivide to isolate
  *     and skip the stuck sentence.
  */
-async function synthesizeSegment(text: string, voice: string): Promise<Buffer | typeof RATE_LIMITED | null> {
+async function synthesizeSegment(text: string): Promise<Buffer | typeof RATE_LIMITED | null> {
   let sawRateLimit = false;
   for (let attempt = 1; attempt <= MAX_TTS_ATTEMPTS; attempt++) {
-    const result = await requestChunk(text, voice);
+    const result = await requestChunk(text);
     if (result && result !== RATE_LIMITED) return result.pcm;
     if (result === RATE_LIMITED) sawRateLimit = true;
     if (attempt < MAX_TTS_ATTEMPTS) {
@@ -346,7 +355,7 @@ function splitInHalf(text: string): [string, string] {
  * @returns the concatenated PCM for the chunk (empty Buffer if every segment
  *          had to be skipped).
  */
-async function synthesizeChunkResilient(text: string, voice: string): Promise<Buffer> {
+async function synthesizeChunkResilient(text: string): Promise<Buffer> {
   // Strip Latin OCR artifacts (Tesseract misreadings of Hebrew glyphs) from
   // Hebrew-primary text. These embedded English sequences trip Gemini's safety
   // classifier with PROHIBITED_CONTENT on every retry. Cleaning first leaves
@@ -358,7 +367,7 @@ async function synthesizeChunkResilient(text: string, voice: string): Promise<Bu
     return Buffer.alloc(0);
   }
 
-  const result = await synthesizeSegment(cleaned, voice);
+  const result = await synthesizeSegment(cleaned);
   if (result instanceof Buffer) return result;
 
   // Rate-limited even after all retries: the free-tier quota is saturated.
@@ -379,8 +388,8 @@ async function synthesizeChunkResilient(text: string, voice: string): Promise<Bu
 
   const [left, right] = splitInHalf(cleaned);
   const [leftPcm, rightPcm] = await Promise.all([
-    synthesizeChunkResilient(left, voice),
-    synthesizeChunkResilient(right, voice),
+    synthesizeChunkResilient(left),
+    synthesizeChunkResilient(right),
   ]);
   return Buffer.concat([leftPcm, rightPcm]);
 }
@@ -447,7 +456,6 @@ export async function synthesizeGemini(
   text: string,
   outputPath: string,
   onProgress?: (fraction: number) => void | Promise<void>,
-  voice = "Charon",
 ): Promise<number> {
   if (config.geminiApiKeys.length === 0) {
     throw new Error("No Gemini API keys configured (set GEMINI_API_KEYS or GEMINI_API_KEY)");
@@ -473,7 +481,7 @@ export async function synthesizeGemini(
     );
     await Promise.all(
       batchIndices.map(async (i) => {
-        pcmBuffers[i] = await synthesizeChunkResilient(chunks[i], voice);
+        pcmBuffers[i] = await synthesizeChunkResilient(chunks[i]);
         completed++;
         await onProgress?.(completed / chunks.length);
       }),

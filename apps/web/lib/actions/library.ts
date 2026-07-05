@@ -20,16 +20,24 @@ export async function uploadFileAction(
   const token = getToken();
   if (!token) return { error: "Not authenticated" };
 
-  // Forward the multipart body to the API. Append scalar fields BEFORE the
-  // file so the API can read `folderId` from `data.fields` when the file part
-  // is reached (busboy parses parts in stream order).
+  // `displayName` arrives as a plain UTF-8 string field sent by the browser
+  // before the file part — browsers always encode string fields as UTF-8,
+  // unlike Content-Disposition filenames which can corrupt Hebrew/non-ASCII.
+  const displayNameRaw = formData.get("displayName");
+  const displayName =
+    typeof displayNameRaw === "string" && displayNameRaw.trim()
+      ? displayNameRaw.trim()
+      : file.name;
+
   const forward = new FormData();
   const folderId = formData.get("folderId");
   if (folderId && typeof folderId === "string") forward.append("folderId", folderId);
-  forward.append("file", file, file.name);
+  forward.append("file", file, "upload");
+
+  const encodedName = encodeURIComponent(displayName);
 
   try {
-    const res = await fetch(`${API_INTERNAL_URL}/files/upload`, {
+    const res = await fetch(`${API_INTERNAL_URL}/files/upload?displayName=${encodedName}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: forward,
@@ -129,13 +137,12 @@ export async function deleteFolderAction(folderId: string): Promise<ActionResult
 export async function createJobAction(
   fileId: string,
   provider: TtsProvider = "gemini",
-  voice = "Charon",
 ): Promise<ActionResult> {
   let job: CreateJobResponse;
   try {
     job = await apiFetch<CreateJobResponse>("/jobs", {
       method: "POST",
-      body: JSON.stringify({ fileId, provider, voice }),
+      body: JSON.stringify({ fileId, provider }),
     });
   } catch (err) {
     return { error: err instanceof ApiError ? err.message : "Could not start conversion" };
@@ -151,12 +158,11 @@ export async function createJobAction(
 export async function queueFileAction(
   fileId: string,
   provider: TtsProvider = "gemini",
-  voice = "Charon",
 ): Promise<ActionResult> {
   try {
     await apiFetch("/jobs", {
       method: "POST",
-      body: JSON.stringify({ fileId, provider, voice }),
+      body: JSON.stringify({ fileId, provider }),
     });
   } catch (err) {
     return { error: err instanceof ApiError ? err.message : "Could not start conversion" };
@@ -172,12 +178,11 @@ export async function queueFileAction(
 export async function convertFilesAction(
   fileIds: string[],
   provider: TtsProvider = "gemini",
-  voice = "Charon",
 ): Promise<{ queued: number; failed: number }> {
   let queued = 0;
   let failed = 0;
   for (const fileId of fileIds) {
-    const result = await queueFileAction(fileId, provider, voice);
+    const result = await queueFileAction(fileId, provider);
     if (result.success) queued++;
     else failed++;
   }

@@ -15,8 +15,6 @@ interface AudioPlayerProps {
   downloadName?: string;
 }
 
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
-
 export function AudioPlayer({
   jobId,
   src,
@@ -28,7 +26,6 @@ export function AudioPlayer({
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(initialPosition);
   const [total, setTotal] = useState(duration ?? 0);
-  const [rate, setRate] = useState(1);
   const lastSaved = useRef(initialPosition);
 
   const persist = useCallback(
@@ -69,12 +66,6 @@ export function AudioPlayer({
     const value = Number(e.target.value);
     el.currentTime = value;
     setCurrent(value);
-  };
-
-  const setSpeed = (s: number) => {
-    const el = audioRef.current;
-    if (el) el.playbackRate = s;
-    setRate(s);
   };
 
   useEffect(() => {
@@ -171,24 +162,6 @@ export function AudioPlayer({
           </Button>
         </div>
 
-        {/* Speed pills */}
-        <div className="flex items-center gap-1 rounded-full border bg-muted p-1">
-          {SPEEDS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSpeed(s)}
-              className={[
-                "rounded-full px-3 py-1 text-xs font-medium tabular-nums transition-all",
-                rate === s
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              ].join(" ")}
-            >
-              {s}×
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Download */}

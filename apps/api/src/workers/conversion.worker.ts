@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { config, CONVERSION_QUEUE_NAME } from "../config.js";
 import type { ConversionJobData } from "../queue/conversionQueue.js";
 import { extractText } from "../services/ocr.service.js";
+import { cleanTextForReading } from "../services/text-cleaner.service.js";
 import { synthesizeGemini, DailyQuotaError } from "../services/tts.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
 
@@ -19,7 +20,7 @@ import { synthesizeAzure } from "../services/azure-tts.service.js";
  * the error is re-thrown so BullMQ can retry.
  */
 async function processConversion(job: Job<ConversionJobData>): Promise<void> {
-  const { fileId, userId, provider = "gemini", voice = "Charon" } = job.data;
+  const { fileId, userId, provider = "gemini" } = job.data;
 
   const file = await prisma.file.findUnique({ where: { id: fileId } });
   if (!file) {
@@ -40,16 +41,23 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
     await setProgress(0);
 
     // OCR occupies 0–70% of the bar...
-    const text = await extractText(file.path, (f) => setProgress(f * 70));
-    if (!text || text.trim().length === 0) {
+    const rawText = await extractText(file.path, (f) => setProgress(f * 70));
+    if (!rawText || rawText.trim().length === 0) {
       throw new Error("No text could be extracted from the document");
+    }
+
+    // Strip non-narrative content (citations, reference section, page numbers,
+    // URLs) so the audio flows naturally without interruptions.
+    const text = cleanTextForReading(rawText);
+    if (!text) {
+      throw new Error("No readable text remained after cleaning");
     }
 
     // ...speech synthesis occupies 70–95%. Dispatch to the chosen TTS engine.
     const outputPath = path.join(config.uploadDir, userId, "audio", `${fileId}.mp3`);
     const duration = provider === "azure"
       ? await synthesizeAzure(text, outputPath, (f) => setProgress(70 + f * 25))
-      : await synthesizeGemini(text, outputPath, (f) => setProgress(70 + f * 25), voice);
+      : await synthesizeGemini(text, outputPath, (f) => setProgress(70 + f * 25));
 
     await prisma.audioJob.upsert({
       where: { fileId },
@@ -88,6 +96,9 @@ export function startConversionWorker(): Worker<ConversionJobData> {
   const worker = new Worker<ConversionJobData>(CONVERSION_QUEUE_NAME, processConversion, {
     connection: connection.duplicate(),
     concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
+    stalledInterval: 15_000,  // re-queue stalled jobs every 15s (default: 30s)
+    lockDuration: 30_000,     // lock expires after 30s if worker dies
+    lockRenewTime: 10_000,    // renew lock every 10s to stay alive
   });
 
   worker.on("completed", (job) => {

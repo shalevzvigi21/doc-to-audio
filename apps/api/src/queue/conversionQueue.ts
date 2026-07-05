@@ -8,8 +8,6 @@ export interface ConversionJobData {
   userId: string;
   /** Which TTS engine to use. Older queued jobs without this default to gemini. */
   provider?: TtsProvider;
-  /** Gemini voice name. Defaults to "Charon" (best Hebrew quality). */
-  voice?: string;
 }
 
 /**

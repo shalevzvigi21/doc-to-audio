@@ -33,9 +33,12 @@ function buildSsml(text: string): string {
   const voice = config.azureSpeechVoice;
   // Locale is the voice's prefix (e.g. "he-IL" from "he-IL-AvriNeural").
   const locale = voice.split("-").slice(0, 2).join("-") || "he-IL";
+  // rate="0%" locks the voice to its default (neutral) speed. This is the
+  // deterministic rate equivalent: Azure SSML guarantees a strictly constant
+  // pace across every chunk, unlike Gemini's generative model.
   return (
     `<speak version="1.0" xml:lang="${locale}">` +
-    `<voice name="${voice}">${escapeXml(text)}</voice>` +
+    `<voice name="${voice}"><prosody rate="0%">${escapeXml(text)}</prosody></voice>` +
     `</speak>`
   );
 }

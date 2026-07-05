@@ -62,16 +62,10 @@ export const he = {
     provider: "מנוע",
     providerGemini: "Gemini",
     providerAzure: "Azure",
-    voiceLabel: "קול",
-  },
-
-  voices: {
-    Charon: "Charon (מומלץ)",
-    Kore: "Kore",
-    Aoede: "Aoede",
-    Fenrir: "Fenrir",
-    Puck: "Puck",
-    Zephyr: "Zephyr",
+    share: "שיתוף",
+    shareCopied: "קישור הועתק!",
+    restart: "הפעל מחדש",
+    interrupted: "הופסק",
   },
 
   tts: {
@@ -103,6 +97,10 @@ export const he = {
     libraryLink: "ספרייה",
     nowPlaying: "מתנגן כעת",
     nowPlayingDescription: "האזינו למסמך שהומר לאודיו.",
+    restart: "הפעל מחדש",
+    stuckHint: "ההמרה נראית תקועה — ייתכן שהשרת הופסק",
+    viewDoc: "צפייה במסמך המקורי",
+    viewDocUnsupported: "סוג קובץ זה אינו תומך בצפייה מוטבעת.",
   },
 
   audio: {

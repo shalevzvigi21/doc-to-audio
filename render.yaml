@@ -1,0 +1,75 @@
+services:
+  # ── API (Fastify + in-process BullMQ worker) ──────────────────────────────
+  - type: web
+    name: doc-to-audio-api
+    runtime: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Persistent disk keeps uploaded PDFs and generated MP3s across deploys.
+    disk:
+      name: uploads
+      mountPath: /data/uploads
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: doc-to-audio-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: doc-to-audio-redis
+          type: redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: GEMINI_API_KEY
+        sync: false        # Set this manually in the Render dashboard
+      - key: GEMINI_API_KEYS
+        sync: false        # Optional: comma-separated list for quota rotation
+      - key: CORS_ORIGIN
+        sync: false        # Set to your web service URL, e.g. https://doc-to-audio.onrender.com
+      - key: UPLOAD_DIR
+        value: /data/uploads
+      - key: WORKER_CONCURRENCY
+        value: 2
+      - key: AZURE_SPEECH_KEY
+        sync: false        # Optional: set to enable Azure TTS fallback
+      - key: AZURE_SPEECH_REGION
+        sync: false        # Optional: e.g. westeurope
+      - key: AZURE_SPEECH_VOICE
+        value: he-IL-AvriNeural
+
+  # ── Web (Next.js standalone) ───────────────────────────────────────────────
+  - type: web
+    name: doc-to-audio-web
+    runtime: docker
+    dockerfilePath: apps/web/Dockerfile
+    dockerContext: .
+    # NEXT_PUBLIC_API_URL is baked in at build time — changing it later requires
+    # a full redeploy of this service.
+    buildCommand: ""
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        sync: false        # Set to your API service's public URL, e.g. https://doc-to-audio-api.onrender.com
+      - key: API_INTERNAL_URL
+        sync: false        # Internal URL for server→API calls, e.g. https://doc-to-audio-api.onrender.com
+
+# ── Managed databases ──────────────────────────────────────────────────────
+databases:
+  - name: doc-to-audio-db
+    databaseName: doc_to_audio
+    plan: free
+
+  - name: doc-to-audio-redis
+    plan: free

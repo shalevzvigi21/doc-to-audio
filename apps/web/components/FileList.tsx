@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
   FileAudio,
   FileText,
   Loader2,
   Pencil,
   Play,
   RotateCcw,
+  Share2,
   Trash2,
   Wand2,
 } from "lucide-react";
@@ -23,8 +28,6 @@ import {
 import { he } from "@/lib/strings";
 
 type FlatFolder = { id: string; name: string };
-
-const VOICES = Object.keys(he.voices) as Array<keyof typeof he.voices>;
 
 function StatusDot({ status }: { status: FileRecord["status"] }) {
   if (status === "DONE")
@@ -45,14 +48,48 @@ function FileCard({
   allFolders: FlatFolder[];
   azureAvailable: boolean;
 }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [provider, setProvider] = useState<TtsProvider>("gemini");
-  const [voice, setVoice] = useState("Charon");
+  const [liveProgress, setLiveProgress] = useState(file.audioJob?.progress ?? 0);
+  const [isCardStuck, setIsCardStuck] = useState(false);
+  const lastProgressRef = useRef(file.audioJob?.progress ?? 0);
+  const lastProgressAtRef = useRef(Date.now());
+  const [copied, setCopied] = useState(false);
 
   const jobId = file.audioJob?.id;
   const isDone = file.status === "DONE" && jobId;
   const isBusy = (file.status === "PENDING" || file.status === "PROCESSING") && jobId;
   const isError = file.status === "ERROR";
+
+  useEffect(() => {
+    if (!isBusy || !jobId) return;
+    const id = setInterval(async () => {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      if (!res.ok) return;
+      const data = await res.json() as { progress?: number; status?: string };
+      const newProg = data.progress ?? 0;
+      setLiveProgress(newProg);
+      if (newProg !== lastProgressRef.current) {
+        lastProgressRef.current = newProg;
+        lastProgressAtRef.current = Date.now();
+        setIsCardStuck(false);
+      } else if (Date.now() - lastProgressAtRef.current > 40_000) {
+        setIsCardStuck(true);
+      }
+      if (data.status === "DONE" || data.status === "ERROR") {
+        clearInterval(id);
+        router.refresh();
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [isBusy, jobId, router]);
+
+  const handleShare = async () => {
+    await navigator.clipboard.writeText(`${window.location.origin}/share/${jobId}`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Rename
   const [isEditing, setIsEditing] = useState(false);
@@ -79,7 +116,7 @@ function FileCard({
   };
 
   const handleConvert = () => {
-    startTransition(async () => { await createJobAction(file.id, provider, voice); });
+    startTransition(async () => { await createJobAction(file.id, provider); });
   };
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -93,33 +130,39 @@ function FileCard({
         "hover:shadow-md hover:-translate-y-0.5",
         isError ? "border-destructive/40 bg-destructive/5" : "",
         isBusy ? "border-blue-400/40" : "",
+        isDone ? "border-emerald-400/50 shadow-emerald-100 dark:shadow-emerald-900/20" : "",
       ].join(" ")}
     >
       {/* Card body */}
       <div className="flex flex-1 flex-col gap-3 p-4">
         {/* Icon + status row */}
         <div className="flex items-start justify-between">
-          <div
-            className={[
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              isAudio
-                ? "bg-emerald-100 dark:bg-emerald-900/40"
-                : isPdf
-                ? "bg-red-100 dark:bg-red-900/40"
-                : "bg-blue-100 dark:bg-blue-900/40",
-            ].join(" ")}
-          >
-            {isAudio ? (
-              <FileAudio className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <FileText
-                className={[
-                  "h-5 w-5",
-                  isPdf
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-blue-600 dark:text-blue-400",
-                ].join(" ")}
-              />
+          <div className="relative">
+            <div
+              className={[
+                "flex h-10 w-10 items-center justify-center rounded-lg",
+                isAudio
+                  ? "bg-emerald-100 dark:bg-emerald-900/40"
+                  : isPdf
+                  ? "bg-red-100 dark:bg-red-900/40"
+                  : "bg-blue-100 dark:bg-blue-900/40",
+              ].join(" ")}
+            >
+              {isAudio ? (
+                <FileAudio className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileText
+                  className={[
+                    "h-5 w-5",
+                    isPdf
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-blue-600 dark:text-blue-400",
+                  ].join(" ")}
+                />
+              )}
+            </div>
+            {isDone && (
+              <CheckCircle2 className="absolute -bottom-1 -end-1 h-4 w-4 rounded-full bg-card text-emerald-500" />
             )}
           </div>
           <div className="flex items-center gap-1.5">
@@ -152,6 +195,36 @@ function FileCard({
           </p>
         )}
 
+        {isDone && (
+          <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ מוכן לשמיעה</p>
+        )}
+
+        {isBusy && (
+          <div className="space-y-1">
+            {isCardStuck && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                {he.file.interrupted}
+              </span>
+            )}
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={[
+                  "h-full transition-all duration-500",
+                  isCardStuck ? "bg-amber-400" : "bg-blue-500",
+                ].join(" ")}
+                style={{ width: `${liveProgress}%` }}
+              />
+            </div>
+            <p className={[
+              "text-end text-xs tabular-nums",
+              isCardStuck ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400",
+            ].join(" ")}>
+              {liveProgress}%
+            </p>
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground">
           {new Date(file.createdAt).toLocaleDateString("he-IL")}
         </p>
@@ -167,15 +240,31 @@ function FileCard({
             </Link>
           </Button>
         ) : isBusy && jobId ? (
-          <Button asChild size="sm" variant="outline" className="flex-1 gap-1.5">
-            <Link href={`/player/${jobId}`}>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {he.file.view}
-            </Link>
-          </Button>
+          <div className="flex flex-1 items-center gap-1">
+            <Button asChild size="sm" variant="outline" className="flex-1 gap-1.5">
+              <Link href={`/player/${jobId}`}>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {he.file.view}
+              </Link>
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0"
+              title={he.file.restart}
+              disabled={isPending}
+              onClick={handleConvert}
+            >
+              {isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-1 flex-col gap-1.5">
-            {/* Provider + voice row */}
+            {/* Provider row */}
             <div className="flex gap-1">
               {azureAvailable && (
                 <select
@@ -187,21 +276,6 @@ function FileCard({
                 >
                   <option value="gemini">{he.file.providerGemini}</option>
                   <option value="azure">{he.file.providerAzure}</option>
-                </select>
-              )}
-              {provider === "gemini" && (
-                <select
-                  aria-label={he.file.voiceLabel}
-                  disabled={isPending}
-                  value={voice}
-                  onChange={(e) => setVoice(e.target.value)}
-                  className="h-7 flex-1 cursor-pointer rounded border border-input bg-background px-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                >
-                  {VOICES.map((v) => (
-                    <option key={v} value={v}>
-                      {he.voices[v]}
-                    </option>
-                  ))}
                 </select>
               )}
             </div>
@@ -225,6 +299,22 @@ function FileCard({
 
         {/* Secondary actions — always visible */}
         <div className="flex items-center gap-0.5">
+          {isDone && jobId && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label={he.file.share}
+              title={he.file.share}
+              onClick={handleShare}
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-500" />
+              ) : (
+                <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </Button>
+          )}
           <Button
             size="icon"
             variant="ghost"
