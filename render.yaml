@@ -71,5 +71,9 @@ databases:
     databaseName: doc_to_audio
     plan: free
 
-  - name: doc-to-audio-redis
+# ── Managed Redis ──────────────────────────────────────────────────────────
+services:
+  - type: redis
+    name: doc-to-audio-redis
     plan: free
+    ipAllowList: []
