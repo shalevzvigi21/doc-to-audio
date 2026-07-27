@@ -3,6 +3,7 @@ services:
   - type: web
     name: doc-to-audio-api
     runtime: docker
+    plan: free
     dockerfilePath: apps/api/Dockerfile
     dockerContext: .
     healthCheckPath: /health
@@ -50,6 +51,7 @@ services:
   - type: web
     name: doc-to-audio-web
     runtime: docker
+    plan: free
     dockerfilePath: apps/web/Dockerfile
     dockerContext: .
     # NEXT_PUBLIC_API_URL is baked in at build time — changing it later requires
