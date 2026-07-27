@@ -39,3 +39,6 @@ gcp-credentials.json
 # Misc
 coverage/
 .turbo/
+
+.vercel
+.env*
