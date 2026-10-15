@@ -1,13 +1,14 @@
 import { AuthForm } from "@/components/AuthForm";
+import { AuthShell } from "@/components/AuthShell";
 import { loginAction } from "@/lib/actions/auth";
 import { he } from "@/lib/strings";
 
 export const metadata = { title: he.meta.login };
 
-export default function LoginPage() {
+export default function Page() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <AuthShell>
       <AuthForm mode="login" action={loginAction} />
-    </main>
+    </AuthShell>
   );
 }

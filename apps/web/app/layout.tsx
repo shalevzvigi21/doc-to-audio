@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { Rubik } from "next/font/google";
+import { JetBrains_Mono, Rubik } from "next/font/google";
 import "./globals.css";
 import { he } from "@/lib/strings";
+import { PlayerProvider } from "@/components/player/PlayerProvider";
 
 const rubik = Rubik({ subsets: ["hebrew", "latin"] });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["500"] });
 
 export const metadata: Metadata = {
   title: he.app.title,
@@ -21,8 +23,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className={`${rubik.className} min-h-screen bg-background antialiased`}>
-        {children}
+      <body className={`${rubik.className} ${mono.variable} min-h-screen bg-background antialiased`}>
+        <PlayerProvider>{children}</PlayerProvider>
       </body>
     </html>
   );

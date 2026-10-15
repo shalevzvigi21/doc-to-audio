@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Zap } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { TtsQuotaResponse } from "@doc-to-audio/types";
+import { cn } from "@/lib/utils";
 import { he } from "@/lib/strings";
 
 function formatReset(seconds: number): string {
@@ -12,6 +13,9 @@ function formatReset(seconds: number): string {
   return `${m}ד׳`;
 }
 
+const pill = "flex items-center gap-2 rounded-full border bg-card py-1.5 ps-2.5 pe-3 text-[13px] text-muted-foreground";
+
+/** Compact daily-quota pill for the header. */
 export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
   const [quota, setQuota] = useState<TtsQuotaResponse | null>(initial);
 
@@ -29,73 +33,45 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
     };
     void load();
     const id = setInterval(load, 20000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
-  if (!quota) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-xs text-muted-foreground">
-        <Zap className="h-3.5 w-3.5" />
-        {he.tts.loading}
-      </div>
-    );
-  }
+  if (!quota) return <div className={pill}>{he.tts.loading}</div>;
 
   const { gemini, azureAvailable } = quota;
 
   if (gemini.exhausted) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive dark:text-red-400">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-        <div className="flex flex-col">
-          <span className="font-medium">{he.tts.exhausted}</span>
-          {gemini.resetsInSeconds != null && (
-            <span className="opacity-80">
-              {he.tts.resetsInPrefix} {formatReset(gemini.resetsInSeconds)}
-            </span>
-          )}
-        </div>
+      <div
+        className={cn(pill, "border-destructive/40 bg-destructive/10 text-destructive")}
+        title={azureAvailable ? he.tts.azureHint : he.tts.azureUnavailable}
+      >
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        <span className="font-medium">
+          {he.tts.exhausted}
+          {gemini.resetsInSeconds != null && ` · ${he.tts.resetsInPrefix} ${formatReset(gemini.resetsInSeconds)}`}
+        </span>
       </div>
     );
   }
 
   const pct = gemini.limit > 0 ? gemini.remaining / gemini.limit : 0;
-  const barColor =
-    pct > 0.5
-      ? "bg-emerald-500"
-      : pct > 0.2
-      ? "bg-amber-500"
-      : "bg-destructive";
+  const bar = pct > 0.5 ? "bg-ok" : pct > 0.2 ? "bg-warn" : "bg-destructive";
 
   return (
-    <div className="flex min-w-[160px] flex-col gap-1 rounded-lg border bg-card px-3 py-2 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 font-medium text-foreground">
-          <Zap className="h-3.5 w-3.5 text-primary" />
-          {he.tts.budgetTitle}
-        </span>
-        <span className="tabular-nums font-semibold text-foreground">
-          {gemini.estimatedPagesRemaining}
-          <span className="text-muted-foreground font-normal"> {he.tts.pagesLeftSuffix}</span>
-        </span>
-      </div>
-
-      {/* Fuel gauge bar */}
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
-          style={{ width: `${Math.round(pct * 100)}%` }}
-        />
-      </div>
-
-      <div className="flex items-center justify-between text-muted-foreground">
-        <span className="tabular-nums">
-          {gemini.remaining}/{gemini.limit} {he.tts.requestsLeft}
-        </span>
-        {!azureAvailable && (
-          <span className="opacity-70">{he.tts.azureUnavailable}</span>
-        )}
-      </div>
+    <div
+      className={pill}
+      title={`${he.tts.budgetTitle}: ${gemini.remaining}/${gemini.limit} ${he.tts.requestsLeft}${azureAvailable ? "" : ` · ${he.tts.azureUnavailable}`}`}
+    >
+      <span>Gemini</span>
+      <span className="hidden h-[5px] w-9 overflow-hidden rounded-full bg-secondary sm:block">
+        <span className={cn("block h-full rounded-full transition-all duration-700", bar)} style={{ width: `${Math.round(pct * 100)}%` }} />
+      </span>
+      <b className="num font-semibold text-foreground">~{gemini.estimatedPagesRemaining}</b>
+      <span className="max-sm:hidden">{he.tts.pagesShort}</span>
     </div>
   );
 }

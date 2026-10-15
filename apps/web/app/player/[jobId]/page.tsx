@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowRight, BookOpen, FileText, Headphones } from "lucide-react";
+import { ArrowRight, FileText } from "lucide-react";
 import type { JobStatusResponse } from "@doc-to-audio/types";
 import { apiFetch, ApiError } from "@/lib/api";
 import { PlayerView } from "@/components/PlayerView";
+import { Brand } from "@/components/Brand";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { he } from "@/lib/strings";
-import { Button } from "@/components/ui/button";
 
 export const metadata = { title: he.meta.player };
 export const dynamic = "force-dynamic";
+
+const EXT = /\.(pdf|docx|txt|md)$/i;
 
 export default async function PlayerPage({ params }: { params: { jobId: string } }) {
   let job: JobStatusResponse;
@@ -22,75 +24,47 @@ export default async function PlayerPage({ params }: { params: { jobId: string }
   }
 
   const isPdf = job.mimeType === "application/pdf";
+  const ext = job.fileName.match(EXT)?.[1]?.toUpperCase();
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/90 backdrop-blur-sm">
-        <div className="container flex h-16 items-center justify-between">
-          <Button asChild variant="ghost" size="sm" className="gap-1.5">
-            <Link href="/library">
-              <ArrowRight className="h-4 w-4" />
-              {he.player.libraryLink}
-            </Link>
-          </Button>
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <BookOpen className="h-4 w-4" />
-            <span className="text-sm font-medium">{he.app.title}</span>
-          </div>
-          <ThemeToggle />
-        </div>
+    <div className="mx-auto max-w-[620px] px-4 pb-16">
+      <header className="flex items-center justify-between py-3.5">
+        <Link
+          href="/library"
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm text-muted-foreground hover:bg-card hover:text-foreground"
+        >
+          <ArrowRight className="h-4 w-4" />
+          {he.player.libraryLink}
+        </Link>
+        <Brand className="text-base max-sm:hidden" />
+        <ThemeToggle />
       </header>
 
-      {/* Hero band — shows the actual document name */}
-      <div className="border-b bg-primary/5 py-8">
-        <div className="container flex items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/15 shadow-inner">
-            <Headphones className="h-8 w-8 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              {he.player.nowPlaying}
-            </p>
-            <p
-              className="truncate text-lg font-semibold text-foreground"
-              dir="auto"
-              title={job.fileName}
-            >
-              {job.fileName}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Player card */}
-      <main className="container py-10">
-        <div className="mx-auto max-w-2xl space-y-6">
-          <div className="rounded-2xl border bg-card p-8 shadow-lg">
+      <main className="mt-4 space-y-4">
+        <div className="rounded-[32px] border bg-card p-6 sm:p-8">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground">{he.player.nowPlaying}</p>
+          <h1 dir="auto" className="mt-2 text-balance text-2xl font-extrabold leading-tight tracking-tight sm:text-[28px]" title={job.fileName}>
+            {job.fileName.replace(EXT, "")}
+          </h1>
+          {ext && <p className="num mt-1 text-sm text-muted-foreground">{ext}</p>}
+          <div className="mt-2">
             <PlayerView initial={job} />
           </div>
-
-          {/* Collapsible document viewer */}
-          <details className="group rounded-2xl border bg-card shadow-lg">
-            <summary className="flex cursor-pointer list-none items-center gap-2 px-6 py-4 text-sm font-medium select-none">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              {he.player.viewDoc}
-            </summary>
-            <div className="border-t px-4 pb-4 pt-3">
-              {isPdf ? (
-                <iframe
-                  src={`/api/files/${job.fileId}`}
-                  className="h-[70vh] w-full rounded-lg border-0"
-                  title={job.fileName}
-                />
-              ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {he.player.viewDocUnsupported}
-                </p>
-              )}
-            </div>
-          </details>
         </div>
+
+        <details className="group rounded-[24px] border bg-card">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-6 py-4 text-sm font-medium select-none">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            {he.player.viewDoc}
+          </summary>
+          <div className="border-t px-4 pb-4 pt-3">
+            {isPdf ? (
+              <iframe src={`/api/files/${job.fileId}`} className="h-[70vh] w-full rounded-xl border-0" title={job.fileName} />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">{he.player.viewDocUnsupported}</p>
+            )}
+          </div>
+        </details>
       </main>
     </div>
   );

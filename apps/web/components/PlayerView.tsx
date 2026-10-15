@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, AlertTriangle, BookOpen, Clock, Loader2, Mic2, RotateCcw } from "lucide-react";
 import type { JobStatusResponse } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
-import { AudioPlayer } from "@/components/AudioPlayer";
+import { InlinePlayer } from "@/components/player/InlinePlayer";
 import { queueFileAction } from "@/lib/actions/library";
 import { he } from "@/lib/strings";
 
 interface PlayerViewProps {
   initial: JobStatusResponse;
 }
+
+const EXT = /\.(pdf|docx|txt|md)$/i;
 
 export function PlayerView({ initial }: PlayerViewProps) {
   const router = useRouter();
@@ -61,20 +63,20 @@ export function PlayerView({ initial }: PlayerViewProps) {
 
   if (job.status === "ERROR") {
     return (
-      <div className="flex flex-col items-center gap-6 py-10 text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
+      <div className="flex flex-col items-center gap-6 py-8 text-center">
+        <div className="grid h-20 w-20 place-items-center rounded-full bg-destructive/10">
           <AlertCircle className="h-10 w-10 text-destructive" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold">{he.player.failedTitle}</h2>
+          <h2 className="text-lg font-bold">{he.player.failedTitle}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{he.player.failedDescription}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push("/library")}>
+          <Button variant="secondary" onClick={() => router.push("/library")}>
             {he.player.backToLibrary}
           </Button>
           <Button onClick={handleRestart} disabled={restarting}>
-            {restarting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            {restarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
             {he.player.restart}
           </Button>
         </div>
@@ -87,26 +89,17 @@ export function PlayerView({ initial }: PlayerViewProps) {
     const isOcr = percent < 70;
 
     return (
-      <div className="flex flex-col items-center gap-6 py-8 text-center">
-        {/* Animated icon */}
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-          {isOcr ? (
-            <BookOpen className="h-9 w-9 text-primary" />
-          ) : (
-            <Mic2 className="h-9 w-9 text-primary" />
-          )}
+      <div className="flex flex-col items-center gap-6 py-6 text-center">
+        <div className="relative grid h-20 w-20 place-items-center rounded-full bg-soft">
+          {isOcr ? <BookOpen className="h-9 w-9 text-primary" /> : <Mic2 className="h-9 w-9 text-primary" />}
           <Loader2 className="absolute inset-0 m-auto h-20 w-20 animate-spin text-primary/30" />
         </div>
 
         <div>
-          <h2 className="flex flex-wrap items-center justify-center gap-2 text-lg font-semibold">
-            {job.status === "PROCESSING"
-              ? isOcr
-                ? "קורא את המסמך…"
-                : he.player.generating
-              : he.player.queued}
+          <h2 className="flex flex-wrap items-center justify-center gap-2 text-lg font-bold">
+            {job.status === "PROCESSING" ? (isOcr ? "קורא את המסמך…" : he.player.generating) : he.player.queued}
             {isStuck && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-sm font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-sm font-medium text-warn">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {he.file.interrupted}
               </span>
@@ -115,7 +108,6 @@ export function PlayerView({ initial }: PlayerViewProps) {
           <p className="mt-1 text-sm text-muted-foreground">{he.player.autoUpdate}</p>
         </div>
 
-        {/* Progress bar */}
         <div className="w-full max-w-sm space-y-2">
           <div
             className="h-2.5 w-full overflow-hidden rounded-full bg-secondary"
@@ -125,10 +117,7 @@ export function PlayerView({ initial }: PlayerViewProps) {
             aria-valuemax={100}
           >
             <div
-              className={[
-                "h-full rounded-full transition-all duration-500",
-                isStuck ? "bg-amber-400" : "bg-primary",
-              ].join(" ")}
+              className={["h-full rounded-full transition-all duration-500", isStuck ? "bg-warn" : "bg-primary"].join(" ")}
               style={{ width: `${percent}%` }}
             />
           </div>
@@ -137,33 +126,20 @@ export function PlayerView({ initial }: PlayerViewProps) {
               <Clock className="h-3 w-3" />
               {isOcr ? "זיהוי טקסט" : "המרה לאודיו"}
             </span>
-            <span className="tabular-nums font-medium">{percent}%</span>
+            <span className="num font-medium">{percent}%</span>
           </div>
         </div>
 
-        {/* Stuck detection banner or subtle restart link */}
         {isStuck ? (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-amber-300/50 bg-amber-50/50 px-4 py-3 text-center dark:bg-amber-900/10">
-            <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-              {he.player.stuckHint}
-            </p>
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-3 text-center">
+            <p className="text-sm font-medium text-warn">{he.player.stuckHint}</p>
             <Button size="sm" variant="outline" disabled={restarting} onClick={handleRestart}>
-              {restarting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5" />
-              )}
+              {restarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
               {he.player.restart}
             </Button>
           </div>
         ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="gap-1 text-xs text-muted-foreground"
-            disabled={restarting}
-            onClick={handleRestart}
-          >
+          <Button size="sm" variant="ghost" className="gap-1 text-xs" disabled={restarting} onClick={handleRestart}>
             <RotateCcw className="h-3 w-3" />
             {he.player.restart}
           </Button>
@@ -173,11 +149,15 @@ export function PlayerView({ initial }: PlayerViewProps) {
   }
 
   return (
-    <AudioPlayer
-      jobId={job.id}
-      src={`/api/audio/${job.id}`}
-      duration={job.duration}
-      initialPosition={job.lastPosition}
+    <InlinePlayer
+      track={{
+        id: job.id,
+        name: job.fileName.replace(EXT, ""),
+        src: `/api/audio/${job.id}`,
+        duration: job.duration,
+        position: job.lastPosition,
+        persist: true,
+      }}
     />
   );
 }

@@ -44,6 +44,13 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        soft: "hsl(var(--soft))",
+        ok: "hsl(var(--ok))",
+        warn: "hsl(var(--warn))",
+        wave: "hsl(var(--wave))",
+      },
+      fontFamily: {
+        mono: ["var(--font-mono)", "ui-monospace", "Menlo", "Consolas", "monospace"],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -59,10 +66,22 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        eq: {
+          "0%, 100%": { height: "14px" },
+          "50%": { height: "var(--eq-peak, 66px)" },
+        },
+        "sheet-up": {
+          from: { transform: "translateY(40px)", opacity: "0" },
+          to: { transform: "none", opacity: "1" },
+        },
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        eq: "eq 1.3s ease-in-out infinite",
+        "sheet-up": "sheet-up 0.25s cubic-bezier(.2,.8,.2,1)",
+        "fade-in": "fade-in 0.2s ease-out",
       },
     },
   },

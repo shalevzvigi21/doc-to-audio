@@ -9,6 +9,12 @@ export const he = {
     description: "הפכו את המסמכים שלכם לאודיו שתוכלו להאזין לו בכל מקום.",
   },
 
+  brand: {
+    heroLine1: "המסמכים שלכם,",
+    heroLine2: "בקול.",
+    heroSub: "מעלים קובץ, לוחצים המרה, ומקשיבים בכל מקום.",
+  },
+
   auth: {
     signInTitle: "התחברות",
     registerTitle: "יצירת חשבון",
@@ -46,6 +52,16 @@ export const he = {
     convertAll: "המרת כל הקבצים",
     convertAllDone: (n: number) => `${n} קבצים הועברו להמרה`,
     convertAllError: "חלק מהקבצים לא הועברו",
+    dropTitleLine1: "גררו מסמך לכאן,",
+    dropTitleLine2: "ונהפוך אותו לאודיו",
+    dropSubtitle: "או בחרו קבצים מהמחשב. אפשר כמה בבת אחת.",
+    chooseFiles: "העלאת קבצים",
+    all: "הכל",
+    foldersAria: "תיקיות",
+    newFolderChip: "תיקייה חדשה",
+    deleteFolderConfirm: "בטוחים? לחצו שוב למחיקה",
+    uploadedHint: "הקבצים הועלו. לחצו \"המרה\" כדי להתחיל.",
+    filesInFolder: (n: number) => `${n} קבצים`,
   },
 
   file: {
@@ -68,12 +84,24 @@ export const he = {
     shareCopied: "קישור הועתק!",
     restart: "הפעל מחדש",
     interrupted: "הופסק",
+    waiting: "ממתין להמרה",
+    failed: "ההמרה נכשלה",
+    moreActions: "עוד פעולות",
+    moveTo: "העברה לתיקייה",
+    deleteConfirm: "בטוחים? לחצו שוב למחיקה",
+    engine: "מנוע הקראה",
+    twoColumns: "מסמך עם שני טורים?",
+    startConvert: "התחלת המרה",
+    resumeHint: "ממשיכים מאיפה שעצרתם",
+    shareCopiedShort: "הקישור הועתק",
+    moveDone: "הועבר",
   },
 
   tts: {
     budgetTitle: "מכסת Gemini להיום",
     pagesLeftPrefix: "נותרו כ-",
     pagesLeftSuffix: "עמודים (משוער)",
+    pagesShort: "עמודים",
     requestsLeft: "בקשות שנותרו",
     exhausted: "מכסת Gemini היומית נגמרה — בחרו Azure להמרה",
     resetsInPrefix: "מתאפס בעוד",
@@ -112,6 +140,17 @@ export const he = {
     play: "השמעה",
     pause: "השהיה",
     download: "הורדת MP3",
+    speed: "מהירות",
+    copyLink: "העתקת קישור",
+    open: "פתיחת הנגן",
+    close: "סגירה",
+    autosave: "ההתקדמות נשמרת אוטומטית, ותמשיכו מאותה נקודה בפעם הבאה.",
+  },
+
+  share: {
+    heading: "שיתפו איתכם הקלטה",
+    cta: "רוצים להמיר את המסמכים שלכם לאודיו?",
+    ctaLink: "הצטרפו בחינם",
   },
 
   meta: {
