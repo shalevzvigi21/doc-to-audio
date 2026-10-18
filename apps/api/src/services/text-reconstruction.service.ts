@@ -6,6 +6,7 @@ import {
   geminiRateGate,
 } from "./tts-usage.service.js";
 import { DailyQuotaError, parseRetrySeconds } from "./tts.service.js";
+import type { GeminiKeyContext } from "./gemini-keys.service.js";
 
 /**
  * Multi-column Hebrew OCR reconstruction via the Gemini text API.
@@ -57,12 +58,15 @@ const RATE_LIMITED = Symbol("rate-limited");
  * text, RATE_LIMITED for a transient failure, or null for a content block /
  * empty response. Throws DailyQuotaError when the per-day cap is hit.
  */
-async function requestPage(text: string): Promise<string | typeof RATE_LIMITED | null> {
-  await geminiRateGate();
+async function requestPage(
+  text: string,
+  ctx: GeminiKeyContext,
+): Promise<string | typeof RATE_LIMITED | null> {
+  await geminiRateGate(ctx);
 
-  const keyIndex = await getActiveKeyIndex();
+  const keyIndex = await getActiveKeyIndex(ctx);
   if (keyIndex === -1) throw new DailyQuotaError();
-  const apiKey = config.geminiApiKeys[keyIndex];
+  const apiKey = ctx.keys[keyIndex];
 
   let res: Response;
   try {
@@ -89,10 +93,10 @@ async function requestPage(text: string): Promise<string | typeof RATE_LIMITED |
     if (res.status === 429) {
       if (/per_?day|PerDay|RequestsPerDay/i.test(body)) {
         const resetSeconds = parseRetrySeconds(body);
-        await markKeyExhausted(keyIndex, resetSeconds);
+        await markKeyExhausted(ctx, keyIndex, resetSeconds);
         console.info(`[reconstruct] key[${keyIndex}] daily quota exhausted — rotating to next key`);
         // Recurse: getActiveKeyIndex() now skips this key. Throws if none left.
-        return requestPage(text);
+        return requestPage(text, ctx);
       }
       return RATE_LIMITED; // per-minute spike — transient, retry with backoff
     }
@@ -101,7 +105,7 @@ async function requestPage(text: string): Promise<string | typeof RATE_LIMITED |
   }
 
   // The API processed this request (200) — count it against the daily budget.
-  void incrementGeminiUsage();
+  void incrementGeminiUsage(ctx);
 
   const data = (await res.json().catch(() => null)) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
@@ -120,11 +124,11 @@ async function requestPage(text: string): Promise<string | typeof RATE_LIMITED |
  * result or a saturated rate limit, returns the original page unchanged so no
  * content is lost.
  */
-async function reconstructOne(page: string): Promise<string> {
+async function reconstructOne(page: string, ctx: GeminiKeyContext): Promise<string> {
   if (!page.trim()) return page;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const result = await requestPage(page);
+    const result = await requestPage(page, ctx);
     if (typeof result === "string") return result;
     if (result === RATE_LIMITED && attempt < MAX_ATTEMPTS) {
       await sleep(4500 + Math.floor(Math.random() * 500));
@@ -146,10 +150,11 @@ async function reconstructOne(page: string): Promise<string> {
  */
 export async function reconstructPageColumns(
   pages: string[],
+  ctx: GeminiKeyContext,
   onProgress?: (fraction: number) => void | Promise<void>,
 ): Promise<string[]> {
-  if (config.geminiApiKeys.length === 0) {
-    throw new Error("No Gemini API keys configured (set GEMINI_API_KEYS or GEMINI_API_KEY)");
+  if (ctx.keys.length === 0) {
+    throw new Error("No Gemini API key available");
   }
 
   const out = new Array<string>(pages.length);
@@ -162,7 +167,7 @@ export async function reconstructPageColumns(
     );
     await Promise.all(
       batchIndices.map(async (i) => {
-        out[i] = await reconstructOne(pages[i]);
+        out[i] = await reconstructOne(pages[i], ctx);
         completed++;
         await onProgress?.(completed / pages.length);
       }),

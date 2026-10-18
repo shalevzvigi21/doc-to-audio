@@ -20,6 +20,7 @@ import type { FileRecord, TtsProvider } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
 import { deleteFileAction, moveFileAction, queueFileAction, renameFileAction } from "@/lib/actions/library";
 import { usePlayer } from "@/components/player/context";
+import { openGeminiSetup } from "@/components/GeminiSetup";
 import { cn, formatClock, relativeDate } from "@/lib/utils";
 import { he } from "@/lib/strings";
 
@@ -111,7 +112,10 @@ function FileRow({
     setActionError(null);
     startTransition(async () => {
       const r = await queueFileAction(file.id, provider, reconstruct);
-      if (r.error) setActionError(r.error);
+      if (r.code === "GEMINI_KEY_MISSING") {
+        setActionError(he.gemini.missingShort);
+        openGeminiSetup();
+      } else if (r.error) setActionError(r.error);
       else {
         setDrawer(false);
         router.refresh();

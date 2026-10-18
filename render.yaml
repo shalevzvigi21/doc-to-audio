@@ -22,8 +22,10 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
+      - key: ENCRYPTION_KEY
+        generateValue: true  # Encrypts the Gemini keys users save in the app
       - key: GEMINI_API_KEY
-        sync: false        # Your Google AI Studio key
+        sync: false        # Optional shared fallback. Users add their own key in the app
       - key: GEMINI_API_KEYS
         sync: false        # Optional: comma-separated list for quota rotation
       - key: CORS_ORIGIN

@@ -9,6 +9,7 @@ import foldersRoutes from "./routes/folders.js";
 import jobsRoutes from "./routes/jobs.js";
 import audioRoutes from "./routes/audio.js";
 import ttsRoutes from "./routes/tts.js";
+import geminiKeyRoutes from "./routes/gemini-key.js";
 
 /** Build and configure the Fastify instance (without starting to listen). */
 export async function buildServer(): Promise<FastifyInstance> {
@@ -26,7 +27,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: config.corsOrigins,
     credentials: true,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
 
   await app.register(multipart, {
@@ -47,6 +48,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(jobsRoutes);
   await app.register(audioRoutes);
   await app.register(ttsRoutes);
+  await app.register(geminiKeyRoutes);
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);

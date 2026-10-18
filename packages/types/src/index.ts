@@ -157,6 +157,19 @@ export interface TtsQuotaResponse {
   };
   /** Whether an Azure Speech key is configured (so Azure can be offered). */
   azureAvailable: boolean;
+  /** Which Gemini key conversions will use for this user. */
+  geminiKey: GeminiKeyStatus;
+}
+
+/**
+ * Where the signed-in user's Gemini key comes from:
+ * "user" = saved by them in the app, "server" = the deployment's shared key,
+ * "none" = nothing configured, so Gemini conversions cannot run yet.
+ */
+export interface GeminiKeyStatus {
+  source: "user" | "server" | "none";
+  /** Last 4 characters of the user's saved key, when source is "user". */
+  last4: string | null;
 }
 
 export interface ApiError {

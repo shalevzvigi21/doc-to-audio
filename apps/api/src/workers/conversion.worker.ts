@@ -11,6 +11,7 @@ import { extractTextPages } from "../services/ocr.service.js";
 import { reconstructPageColumns } from "../services/text-reconstruction.service.js";
 import { cleanTextForReading } from "../services/text-cleaner.service.js";
 import { synthesizeGemini, DailyQuotaError } from "../services/tts.service.js";
+import { MissingGeminiKeyError, resolveGeminiContext } from "../services/gemini-keys.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
 import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
 
@@ -33,6 +34,10 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
   }
 
   await prisma.file.update({ where: { id: fileId }, data: { status: "PROCESSING" } });
+
+  // Resolve the owner's Gemini key once. It is looked up here, never put in the
+  // queue payload, so keys are not stored in Redis.
+  const geminiCtx = await resolveGeminiContext(userId);
 
   // Persist a 0–100 progress value the player page polls. Writes are coarse
   // (one per page / per chunk), so a direct update per step is fine.
@@ -61,9 +66,9 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
     // enhancement — on any failure (block, quota, error) fall back to the raw
     // OCR text so the conversion still produces audio.
     let rawText: string;
-    if (reconstructColumns) {
+    if (reconstructColumns && geminiCtx) {
       try {
-        const reconstructed = await reconstructPageColumns(pages, (f) => setProgress(60 + f * 10));
+        const reconstructed = await reconstructPageColumns(pages, geminiCtx, (f) => setProgress(60 + f * 10));
         rawText = reconstructed.join("\n\n");
       } catch (err) {
         console.warn(`[conversion] column reconstruction failed for ${fileId} — using raw OCR:`, err);
@@ -89,9 +94,13 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
     const tmpWorkDir = await mkdtemp(path.join(tmpdir(), "doc2audio-mp3-"));
     localMp3Path = path.join(tmpWorkDir, `${fileId}.mp3`);
 
-    const duration = provider === "azure"
-      ? await synthesizeAzure(text, localMp3Path, (f) => setProgress(70 + f * 25))
-      : await synthesizeGemini(text, localMp3Path, (f) => setProgress(70 + f * 25));
+    let duration: number;
+    if (provider === "azure") {
+      duration = await synthesizeAzure(text, localMp3Path, (f) => setProgress(70 + f * 25));
+    } else {
+      if (!geminiCtx) throw new MissingGeminiKeyError();
+      duration = await synthesizeGemini(text, localMp3Path, geminiCtx, (f) => setProgress(70 + f * 25));
+    }
 
     // Upload MP3 to storage and get back the path/key to store in DB.
     const audioStorageKey = `audio/${userId}/${fileId}.mp3`;
@@ -117,6 +126,10 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
 
     if (err instanceof DailyQuotaError) {
       console.error(`[conversion] daily Gemini quota exhausted — not retrying. ${err.message}`);
+      return;
+    }
+    if (err instanceof MissingGeminiKeyError) {
+      console.error(`[conversion] no Gemini key for user ${userId} — not retrying.`);
       return;
     }
     throw err;

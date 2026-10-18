@@ -2,13 +2,13 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpeg from "fluent-ffmpeg";
-import { config } from "../config.js";
 import {
   incrementGeminiUsage,
   markKeyExhausted,
   getActiveKeyIndex,
   geminiRateGate,
 } from "./tts-usage.service.js";
+import type { GeminiKeyContext } from "./gemini-keys.service.js";
 
 /**
  * Text-to-speech via the Gemini API (Google AI Studio key).
@@ -146,17 +146,20 @@ export function parseRetrySeconds(body: string): number | null {
 }
 
 /** Issue a single Gemini TTS request and parse out the PCM payload. */
-async function requestChunk(text: string): Promise<GeminiPcm | typeof RATE_LIMITED | null> {
+async function requestChunk(
+  text: string,
+  ctx: GeminiKeyContext,
+): Promise<GeminiPcm | typeof RATE_LIMITED | null> {
   // Shared, process-wide gate keeps TTS + reconstruction under the free-tier RPM cap.
-  await geminiRateGate();
+  await geminiRateGate(ctx);
 
   // Pick the first API key that still has daily quota. If all keys are
   // exhausted we throw immediately so the worker surfaces a clear error.
-  const keyIndex = await getActiveKeyIndex();
+  const keyIndex = await getActiveKeyIndex(ctx);
   if (keyIndex === -1) {
     throw new DailyQuotaError();
   }
-  const apiKey = config.geminiApiKeys[keyIndex];
+  const apiKey = ctx.keys[keyIndex];
 
   let res: Response;
   try {
@@ -188,11 +191,11 @@ async function requestChunk(text: string): Promise<GeminiPcm | typeof RATE_LIMIT
       // Distinguish the per-DAY free-tier cap from a transient per-minute spike.
       if (/per_?day|PerDay|RequestsPerDay/i.test(body)) {
         const resetSeconds = parseRetrySeconds(body);
-        await markKeyExhausted(keyIndex, resetSeconds);
+        await markKeyExhausted(ctx, keyIndex, resetSeconds);
         console.info(`[tts] key[${keyIndex}] daily quota exhausted — rotating to next key`);
         // Recurse: getActiveKeyIndex() will now skip this key and pick the next.
         // If no key is left, the recursive call throws DailyQuotaError.
-        return requestChunk(text);
+        return requestChunk(text, ctx);
       }
       return RATE_LIMITED; // per-minute spike — transient, retry with backoff
     }
@@ -202,7 +205,7 @@ async function requestChunk(text: string): Promise<GeminiPcm | typeof RATE_LIMIT
 
   // The API processed this request (200) — count it against the daily budget,
   // whether or not it returned audio (a content block still consumes quota).
-  void incrementGeminiUsage();
+  void incrementGeminiUsage(ctx);
 
   const data = (await res.json()) as {
     promptFeedback?: { blockReason?: string };
@@ -297,10 +300,13 @@ function isSpeakable(text: string): boolean {
  *   - `null` — a genuine content block; the caller can subdivide to isolate
  *     and skip the stuck sentence.
  */
-async function synthesizeSegment(text: string): Promise<Buffer | typeof RATE_LIMITED | null> {
+async function synthesizeSegment(
+  text: string,
+  ctx: GeminiKeyContext,
+): Promise<Buffer | typeof RATE_LIMITED | null> {
   let sawRateLimit = false;
   for (let attempt = 1; attempt <= MAX_TTS_ATTEMPTS; attempt++) {
-    const result = await requestChunk(text);
+    const result = await requestChunk(text, ctx);
     if (result && result !== RATE_LIMITED) return result.pcm;
     if (result === RATE_LIMITED) sawRateLimit = true;
     if (attempt < MAX_TTS_ATTEMPTS) {
@@ -341,7 +347,7 @@ function splitInHalf(text: string): [string, string] {
  * @returns the concatenated PCM for the chunk (empty Buffer if every segment
  *          had to be skipped).
  */
-async function synthesizeChunkResilient(text: string): Promise<Buffer> {
+async function synthesizeChunkResilient(text: string, ctx: GeminiKeyContext): Promise<Buffer> {
   // Strip Latin OCR artifacts (Tesseract misreadings of Hebrew glyphs) from
   // Hebrew-primary text. These embedded English sequences trip Gemini's safety
   // classifier with PROHIBITED_CONTENT on every retry. Cleaning first leaves
@@ -353,7 +359,7 @@ async function synthesizeChunkResilient(text: string): Promise<Buffer> {
     return Buffer.alloc(0);
   }
 
-  const result = await synthesizeSegment(cleaned);
+  const result = await synthesizeSegment(cleaned, ctx);
   if (result instanceof Buffer) return result;
 
   // Rate-limited even after all retries: the free-tier quota is saturated.
@@ -374,8 +380,8 @@ async function synthesizeChunkResilient(text: string): Promise<Buffer> {
 
   const [left, right] = splitInHalf(cleaned);
   const [leftPcm, rightPcm] = await Promise.all([
-    synthesizeChunkResilient(left),
-    synthesizeChunkResilient(right),
+    synthesizeChunkResilient(left, ctx),
+    synthesizeChunkResilient(right, ctx),
   ]);
   return Buffer.concat([leftPcm, rightPcm]);
 }
@@ -441,10 +447,11 @@ export async function encodePcmToMp3(
 export async function synthesizeGemini(
   text: string,
   outputPath: string,
+  ctx: GeminiKeyContext,
   onProgress?: (fraction: number) => void | Promise<void>,
 ): Promise<number> {
-  if (config.geminiApiKeys.length === 0) {
-    throw new Error("No Gemini API keys configured (set GEMINI_API_KEYS or GEMINI_API_KEY)");
+  if (ctx.keys.length === 0) {
+    throw new Error("No Gemini API key available");
   }
 
   const chunks = splitIntoChunks(text);
@@ -467,7 +474,7 @@ export async function synthesizeGemini(
     );
     await Promise.all(
       batchIndices.map(async (i) => {
-        pcmBuffers[i] = await synthesizeChunkResilient(chunks[i]);
+        pcmBuffers[i] = await synthesizeChunkResilient(chunks[i], ctx);
         completed++;
         await onProgress?.(completed / chunks.length);
       }),

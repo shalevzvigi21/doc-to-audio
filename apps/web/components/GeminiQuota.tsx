@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, KeyRound } from "lucide-react";
 import type { TtsQuotaResponse } from "@doc-to-audio/types";
 import { cn } from "@/lib/utils";
+import { GEMINI_KEY_CHANGED, openGeminiSetup } from "@/components/GeminiSetup";
 import { he } from "@/lib/strings";
 
 function formatReset(seconds: number): string {
@@ -33,15 +34,34 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
     };
     void load();
     const id = setInterval(load, 20000);
+    window.addEventListener(GEMINI_KEY_CHANGED, load);
     return () => {
       cancelled = true;
       clearInterval(id);
+      window.removeEventListener(GEMINI_KEY_CHANGED, load);
     };
   }, []);
 
   if (!quota) return <div className={pill}>{he.tts.loading}</div>;
 
-  const { gemini, azureAvailable } = quota;
+  const { gemini, azureAvailable, geminiKey } = quota;
+
+  // No key yet: the pill becomes the way into the setup guide.
+  // `geminiKey` is absent when the web app is newer than the API, so treat that as "has a key".
+  if (geminiKey?.source === "none") {
+    return (
+      <button
+        type="button"
+        onClick={openGeminiSetup}
+        aria-label={he.gemini.openAria}
+        className={cn(pill, "border-warn/40 bg-warn/10 font-medium text-warn hover:brightness-95")}
+      >
+        <KeyRound className="h-4 w-4" />
+        {he.gemini.pillMissing}
+        <span className="rounded-full bg-warn px-2 py-px text-xs text-background">{he.gemini.pillAdd}</span>
+      </button>
+    );
+  }
 
   if (gemini.exhausted) {
     return (
@@ -62,8 +82,11 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
   const bar = pct > 0.5 ? "bg-ok" : pct > 0.2 ? "bg-warn" : "bg-destructive";
 
   return (
-    <div
-      className={pill}
+    <button
+      type="button"
+      onClick={openGeminiSetup}
+      aria-label={he.gemini.openAria}
+      className={cn(pill, "hover:border-foreground/30")}
       title={`${he.tts.budgetTitle}: ${gemini.remaining}/${gemini.limit} ${he.tts.requestsLeft}${azureAvailable ? "" : ` · ${he.tts.azureUnavailable}`}`}
     >
       <span>Gemini</span>
@@ -72,6 +95,6 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
       </span>
       <b className="num font-semibold text-foreground">~{gemini.estimatedPagesRemaining}</b>
       <span className="max-sm:hidden">{he.tts.pagesShort}</span>
-    </div>
+    </button>
   );
 }

@@ -7,6 +7,7 @@ import type { JobStatusResponse } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
 import { InlinePlayer } from "@/components/player/InlinePlayer";
 import { queueFileAction } from "@/lib/actions/library";
+import { openGeminiSetup } from "@/components/GeminiSetup";
 import { he } from "@/lib/strings";
 
 interface PlayerViewProps {
@@ -53,7 +54,12 @@ export function PlayerView({ initial }: PlayerViewProps) {
 
   const handleRestart = async () => {
     setRestarting(true);
-    await queueFileAction(job.fileId);
+    const result = await queueFileAction(job.fileId);
+    if (result.code === "GEMINI_KEY_MISSING") {
+      openGeminiSetup();
+      setRestarting(false);
+      return;
+    }
     setJob((prev) => ({ ...prev, status: "PENDING", progress: 0 }));
     lastProgressRef.current = 0;
     lastProgressAtRef.current = Date.now();

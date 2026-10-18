@@ -1,5 +1,5 @@
 import { connection } from "../lib/redis.js";
-import { config } from "../config.js";
+import type { GeminiKeyContext } from "./gemini-keys.service.js";
 
 /**
  * Tracks Gemini TTS request usage against the free-tier **daily** cap so the UI
@@ -31,14 +31,18 @@ export const GEMINI_DAILY_LIMIT = 100;
  * `nextRequestAt` cursor serializes request *starts* process-wide.
  */
 const MIN_REQUEST_INTERVAL_MS = 4500;
-let nextRequestAt = 0;
+/**
+ * The cap is per Gemini key, so each scope (one user's own key, or the shared
+ * server keys) gets its own cursor.
+ */
+const nextRequestAtByScope = new Map<string, number>();
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Await this before starting any Gemini request to respect the shared RPM cap. */
-export async function geminiRateGate(): Promise<void> {
+/** Await this before starting any Gemini request to respect the RPM cap of that key scope. */
+export async function geminiRateGate(ctx: GeminiKeyContext): Promise<void> {
   const now = Date.now();
-  const startAt = Math.max(now, nextRequestAt);
-  nextRequestAt = startAt + MIN_REQUEST_INTERVAL_MS;
+  const startAt = Math.max(now, nextRequestAtByScope.get(ctx.scope) ?? 0);
+  nextRequestAtByScope.set(ctx.scope, startAt + MIN_REQUEST_INTERVAL_MS);
   const wait = startAt - now;
   if (wait > 0) await sleep(wait);
 }
@@ -55,14 +59,28 @@ function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-const usedKey = () => `tts:gemini:used:${todayKey()}`;
+const usedKey = (scope: string) => `tts:gemini:${scope}:used:${todayKey()}`;
 /** Per-key exhaustion marker: which key index ran out of daily quota. */
-const keyExhaustedKey = (keyIndex: number) => `tts:gemini:exhausted:${keyIndex}:${todayKey()}`;
+const keyExhaustedKey = (scope: string, keyIndex: number) =>
+  `tts:gemini:${scope}:exhausted:${keyIndex}:${todayKey()}`;
+
+/**
+ * Forget today's usage and exhaustion markers for a scope. Called when a user
+ * saves or removes their key, so a fresh key never inherits the old key's state.
+ */
+export async function resetGeminiScope(scope: string, keyCount = 1): Promise<void> {
+  try {
+    const keys = [usedKey(scope), ...Array.from({ length: keyCount }, (_, i) => keyExhaustedKey(scope, i))];
+    await connection.del(...keys);
+  } catch {
+    /* best-effort */
+  }
+}
 
 /** Count one Gemini request that the API processed. Best-effort (never throws). */
-export async function incrementGeminiUsage(n = 1): Promise<void> {
+export async function incrementGeminiUsage(ctx: GeminiKeyContext, n = 1): Promise<void> {
   try {
-    const key = usedKey();
+    const key = usedKey(ctx.scope);
     await connection.incrby(key, n);
     await connection.expire(key, TWO_DAYS_SECONDS);
   } catch {
@@ -74,9 +92,13 @@ export async function incrementGeminiUsage(n = 1): Promise<void> {
  * Mark a specific Gemini API key as having exhausted its daily quota.
  * Stores the absolute reset epoch (seconds) so we know when it recovers.
  */
-export async function markKeyExhausted(keyIndex: number, resetInSeconds: number | null): Promise<void> {
+export async function markKeyExhausted(
+  ctx: GeminiKeyContext,
+  keyIndex: number,
+  resetInSeconds: number | null,
+): Promise<void> {
   try {
-    const key = keyExhaustedKey(keyIndex);
+    const key = keyExhaustedKey(ctx.scope, keyIndex);
     const resetAt = Math.floor(Date.now() / 1000) + (resetInSeconds && resetInSeconds > 0 ? resetInSeconds : 0);
     await connection.set(key, String(resetAt), "EX", TWO_DAYS_SECONDS);
   } catch {
@@ -88,9 +110,9 @@ export async function markKeyExhausted(keyIndex: number, resetInSeconds: number 
  * Check whether a specific API key index has exhausted its daily quota
  * and the reset time hasn't passed yet.
  */
-async function isKeyExhausted(keyIndex: number): Promise<boolean> {
+async function isKeyExhausted(ctx: GeminiKeyContext, keyIndex: number): Promise<boolean> {
   try {
-    const raw = await connection.get(keyExhaustedKey(keyIndex));
+    const raw = await connection.get(keyExhaustedKey(ctx.scope, keyIndex));
     if (!raw) return false;
     const resetAt = Number.parseInt(raw, 10);
     return Number.isFinite(resetAt) && resetAt > Math.floor(Date.now() / 1000);
@@ -103,10 +125,9 @@ async function isKeyExhausted(keyIndex: number): Promise<boolean> {
  * Return the index of the first API key that still has daily quota remaining,
  * or -1 if every configured key is exhausted.
  */
-export async function getActiveKeyIndex(): Promise<number> {
-  const keys = config.geminiApiKeys;
-  for (let i = 0; i < keys.length; i++) {
-    if (!(await isKeyExhausted(i))) return i;
+export async function getActiveKeyIndex(ctx: GeminiKeyContext): Promise<number> {
+  for (let i = 0; i < ctx.keys.length; i++) {
+    if (!(await isKeyExhausted(ctx, i))) return i;
   }
   return -1;
 }
@@ -121,14 +142,14 @@ export interface GeminiUsage {
 }
 
 /** Read the current day's Gemini usage snapshot (never throws). */
-export async function getGeminiUsage(): Promise<GeminiUsage> {
+export async function getGeminiUsage(ctx: GeminiKeyContext): Promise<GeminiUsage> {
   let used = 0;
-  const keyCount = config.geminiApiKeys.length || 1;
+  const keyCount = ctx.keys.length || 1;
   const nowSec = Math.floor(Date.now() / 1000);
 
   try {
     // Fetch the global usage counter and all per-key exhaustion markers in one round-trip.
-    const keys = [usedKey(), ...Array.from({ length: keyCount }, (_, i) => keyExhaustedKey(i))];
+    const keys = [usedKey(ctx.scope), ...Array.from({ length: keyCount }, (_, i) => keyExhaustedKey(ctx.scope, i))];
     const results = await connection.mget(...keys);
     used = results[0] ? Number.parseInt(results[0], 10) || 0 : 0;
 

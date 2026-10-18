@@ -45,7 +45,9 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
       JWT_EXPIRES_IN: 7d
+      # Users add their own Gemini key in the app. This is only an optional shared fallback.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       HOST: 0.0.0.0
       PORT: 4000
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}

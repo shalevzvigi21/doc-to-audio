@@ -167,7 +167,8 @@ export async function queueFileAction(
       body: JSON.stringify({ fileId, provider, reconstructColumns }),
     });
   } catch (err) {
-    return { error: err instanceof ApiError ? err.message : "Could not start conversion" };
+    if (err instanceof ApiError) return { error: err.message, code: err.code };
+    return { error: "Could not start conversion" };
   }
   revalidatePath("/library");
   return { success: true };
@@ -181,16 +182,23 @@ export async function convertFilesAction(
   fileIds: string[],
   provider: TtsProvider = "gemini",
   reconstructColumns = false,
-): Promise<{ queued: number; failed: number }> {
+): Promise<{ queued: number; failed: number; missingKey: boolean }> {
   let queued = 0;
   let failed = 0;
+  let missingKey = false;
   for (const fileId of fileIds) {
     const result = await queueFileAction(fileId, provider, reconstructColumns);
     if (result.success) queued++;
     else failed++;
+    // No Gemini key saved: every remaining file would fail the same way.
+    if (result.code === "GEMINI_KEY_MISSING") {
+      missingKey = true;
+      failed += fileIds.length - queued - failed;
+      break;
+    }
   }
   revalidatePath("/library");
-  return { queued, failed };
+  return { queued, failed, missingKey };
 }
 
 /** Persist the listener's last playback position. */

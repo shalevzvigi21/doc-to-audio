@@ -9,6 +9,7 @@ import { prisma } from "../lib/prisma.js";
 import { conversionQueue } from "../queue/conversionQueue.js";
 import { config } from "../config.js";
 import { requireUser, notFound, badRequest } from "../lib/http.js";
+import { resolveGeminiContext } from "../services/gemini-keys.service.js";
 
 const createJobSchema = z.object({
   fileId: z.string().cuid("A valid fileId is required"),
@@ -34,6 +35,16 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     const { provider, reconstructColumns } = parsed.data;
     if (provider === "azure" && !config.azureConfigured) {
       return badRequest(reply, "Azure TTS is not configured on the server");
+    }
+
+    // Gemini conversions need a key: the user's own, or the server's fallback.
+    if (provider === "gemini" && !(await resolveGeminiContext(user.id))) {
+      return reply.code(400).send({
+        statusCode: 400,
+        error: "Bad Request",
+        code: "GEMINI_KEY_MISSING",
+        message: "Add your Gemini API key before converting",
+      });
     }
 
     const file = await prisma.file.findFirst({

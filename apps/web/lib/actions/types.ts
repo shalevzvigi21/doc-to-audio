@@ -6,5 +6,7 @@ export interface AuthFormState {
 
 export interface ActionResult {
   error?: string;
+  /** Machine-readable error code from the API, when there is one. */
+  code?: string;
   success?: boolean;
 }

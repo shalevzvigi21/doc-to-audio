@@ -23,7 +23,13 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1, "REDIS_URL is required").default("redis://localhost:6379"),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   JWT_EXPIRES_IN: z.string().default("7d"),
+  /**
+   * Optional server-wide Gemini key(s). Users normally add their own key in the app;
+   * these are only a fallback for users who have not.
+   */
   GEMINI_API_KEY: z.string().optional().default(""),
+  /** Secret used to encrypt users' saved Gemini keys. Falls back to a key derived from JWT_SECRET. */
+  ENCRYPTION_KEY: z.string().optional().default(""),
   /** Comma-separated list of Gemini API keys to rotate through when one exhausts its daily quota. */
   GEMINI_API_KEYS: z.string().optional().default(""),
   /** Gemini text model for multi-column OCR reconstruction. Override if the default slug is unavailable. */
@@ -74,6 +80,7 @@ export const config = {
   redisUrl: env.REDIS_URL,
   jwtSecret: env.JWT_SECRET,
   jwtExpiresIn: env.JWT_EXPIRES_IN,
+  encryptionKey: env.ENCRYPTION_KEY,
   geminiApiKey: geminiApiKeys[0] ?? "",
   geminiApiKeys,
   geminiTextModel: env.GEMINI_TEXT_MODEL,

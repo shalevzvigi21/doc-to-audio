@@ -6,6 +6,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Machine-readable code from the API, e.g. "GEMINI_KEY_MISSING". */
+    public code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -41,13 +43,15 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
 
   if (!res.ok) {
     let message = res.statusText;
+    let code: string | undefined;
     try {
-      const data = (await res.json()) as { message?: string };
+      const data = (await res.json()) as { message?: string; code?: string };
       if (data?.message) message = data.message;
+      code = data?.code;
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
 
   if (res.status === 204) return undefined as T;

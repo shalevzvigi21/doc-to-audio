@@ -59,8 +59,10 @@ Text-to-Speech**.
 
 - Node.js >= 20 and `pnpm` (`corepack enable`)
 - PostgreSQL and Redis (or just run them via Docker — see below)
-- A Google Cloud service-account JSON with **Text-to-Speech** enabled
-- (Optional) a Gemini API key for text cleanup
+- A Gemini API key. Each user adds their own inside the app (a Hebrew guide opens
+  on first launch). A key in `GEMINI_API_KEY` is only an optional shared fallback.
+- OCR tools on the machine running the API: Tesseract (heb + eng), Ghostscript,
+  GraphicsMagick, ffmpeg. The Docker image already includes them.
 
 ### 1. Install
 
@@ -74,12 +76,8 @@ pnpm --filter @doc-to-audio/types build   # build the shared types once
 ```bash
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
-# edit the values — at minimum set JWT_SECRET, DATABASE_URL, REDIS_URL,
-# and GOOGLE_APPLICATION_CREDENTIALS
+# edit the values: at minimum set JWT_SECRET, DATABASE_URL and REDIS_URL
 ```
-
-Place your Google credentials JSON somewhere and point
-`GOOGLE_APPLICATION_CREDENTIALS` at it (e.g. `./gcp-credentials.json`).
 
 ### 3. Start Postgres + Redis (optional helper)
 
@@ -112,15 +110,12 @@ ready.
 ## Run the whole stack with Docker
 
 ```bash
-# Provide a credentials file at the repo root (bind-mounted into api + worker):
-cp /path/to/your-service-account.json ./gcp-credentials.json
-
-# Optionally export secrets so compose can pick them up:
-export JWT_SECRET="$(openssl rand -hex 32)"
-export GEMINI_API_KEY="..."
-
+cp .env.example .env     # then set JWT_SECRET and ENCRYPTION_KEY (see SETUP.he.md)
 docker compose up --build
 ```
+
+Then open http://localhost:3000. A step-by-step Hebrew setup guide for whoever
+receives this project is in [`SETUP.he.md`](SETUP.he.md).
 
 Services:
 
@@ -132,9 +127,14 @@ Services:
 | `postgres` | 5432 | PostgreSQL 16                        |
 | `redis`    | 6379 | Redis 7                              |
 
-> The `api` and `worker` containers bind-mount `./gcp-credentials.json`. Create
-> that file before `docker compose up`, otherwise Docker will create a directory
-> in its place and TTS will fail.
+### Gemini API keys
+
+Every user brings their own Gemini key. On first launch the app shows a Hebrew
+guide (get a key at <https://aistudio.google.com/apikey>, paste it, save). The key
+is verified with Google, then stored **AES-256-GCM encrypted** in the database
+(`ENCRYPTION_KEY`, or derived from `JWT_SECRET`) and is only used for that user's
+conversions. Daily quota is tracked per key. Without a saved key, Gemini
+conversions are refused and the guide opens again.
 
 ## API reference
 
@@ -154,6 +154,10 @@ header.
 | GET    | `/jobs/:id`             | Job status + audio path                      |
 | PATCH  | `/jobs/:id/position`    | Save playback position (`lastPosition`)      |
 | GET    | `/audio/:jobId`         | Stream the MP3 (HTTP range supported)        |
+| GET    | `/me/gemini-key`        | Whether the user has a saved Gemini key (`source`, `last4`) |
+| PUT    | `/me/gemini-key`        | Verify with Google, then save the key (`apiKey`) |
+| DELETE | `/me/gemini-key`        | Remove the saved key                         |
+| GET    | `/tts/quota`            | Today's Gemini usage for the user's key      |
 
 ## Notes on auth
 
