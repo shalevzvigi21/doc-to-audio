@@ -14,6 +14,21 @@ start "doc2audio-redis" /min "%SVC%\redis\redis-server.exe" --port 6379 --bind 1
 echo Starting PostgreSQL...
 "%SVC%\pgsql\bin\pg_ctl.exe" -D "%SVC%\pgdata" -l "%SVC%\pg.log" -o "-p 5432" start
 
+REM Give PostgreSQL a moment to accept connections, then bring the database
+REM up to date. The Gemini-key feature adds two columns to the User table; without
+REM this step, login fails on an older database. Safe to run on every launch.
+timeout /t 4 >nul
+echo Updating database schema...
+call pnpm --filter @doc-to-audio/types build
+call pnpm --filter @doc-to-audio/api db:generate
+call pnpm --filter @doc-to-audio/api db:push
+if errorlevel 1 (
+  echo.
+  echo WARNING: the database update failed. If an old "doc2audio-api" window is still
+  echo open, close it and run this file again.
+  echo.
+)
+
 echo Starting API server...
 start "doc2audio-api" /min cmd /c "cd /d "%ROOT%" && pnpm --filter @doc-to-audio/api dev"
 
