@@ -152,6 +152,8 @@ export interface TtsQuotaResponse {
     estimatedPagesRemaining: number;
     /** True once Gemini returned a per-day quota 429. */
     exhausted: boolean;
+    /** Paid Google project: no daily cap is shown. */
+    unlimited?: boolean;
     /** Seconds until the daily quota resets, when known. */
     resetsInSeconds: number | null;
   };

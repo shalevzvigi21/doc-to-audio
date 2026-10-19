@@ -109,6 +109,7 @@ export const he = {
 
   tts: {
     budgetTitle: "מכסת Gemini להיום",
+    unlimited: "ללא מגבלה יומית",
     pagesLeftPrefix: "נותרו כ-",
     pagesLeftSuffix: "עמודים (משוער)",
     pagesShort: "עמודים",

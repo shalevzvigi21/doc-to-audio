@@ -85,6 +85,20 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
     );
   }
 
+  if (gemini.unlimited) {
+    return (
+      <button
+        type="button"
+        onClick={openGeminiSetup}
+        aria-label={he.gemini.openAria}
+        className={cn(pill, "hover:border-foreground/30")}
+      >
+        <span>Gemini</span>
+        <b className="font-semibold text-foreground">{he.tts.unlimited}</b>
+      </button>
+    );
+  }
+
   const pct = gemini.limit > 0 ? gemini.remaining / gemini.limit : 0;
   const bar = pct > 0.5 ? "bg-ok" : pct > 0.2 ? "bg-warn" : "bg-destructive";
 

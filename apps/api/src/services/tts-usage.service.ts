@@ -1,4 +1,5 @@
 import { connection } from "../lib/redis.js";
+import { config } from "../config.js";
 import type { GeminiKeyContext } from "./gemini-keys.service.js";
 
 /**
@@ -30,7 +31,8 @@ export const GEMINI_DAILY_LIMIT = 100;
  * flight. ~4.5s ≈ 13 req/min, just under the 15 RPM cap. The module-level
  * `nextRequestAt` cursor serializes request *starts* process-wide.
  */
-const MIN_REQUEST_INTERVAL_MS = 4500;
+// Paid projects have far higher per-minute limits, so requests can go out faster.
+const MIN_REQUEST_INTERVAL_MS = config.geminiPaidTier ? 600 : 4500;
 /**
  * The cap is per Gemini key, so each scope (one user's own key, or the shared
  * server keys) gets its own cursor.
@@ -139,6 +141,8 @@ export interface GeminiUsage {
   estimatedPagesRemaining: number;
   exhausted: boolean;
   resetsInSeconds: number | null;
+  /** Paid project with no daily cap to display. */
+  unlimited?: boolean;
 }
 
 /** Read the current day's Gemini usage snapshot (never throws). */
@@ -174,6 +178,11 @@ export async function getGeminiUsage(ctx: GeminiKeyContext): Promise<GeminiUsage
     }
 
     const exhausted = allExhausted;
+    // Paid project: there is no 100/day cap to count down. A real per-day 429
+    // from Google (exhausted) is still honoured above.
+    if (config.geminiPaidTier && !exhausted) {
+      return { used, limit: 0, remaining: 0, estimatedPagesRemaining: 0, exhausted: false, resetsInSeconds: null, unlimited: true };
+    }
     const resetsInSeconds = exhausted && earliestReset !== null ? earliestReset - nowSec : null;
     const remaining = exhausted ? 0 : Math.max(0, GEMINI_DAILY_LIMIT * keyCount - used);
     const estimatedPagesRemaining = Math.round((remaining * CHARS_PER_REQUEST) / CHARS_PER_PAGE);

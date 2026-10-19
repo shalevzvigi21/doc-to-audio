@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpeg from "fluent-ffmpeg";
+import { config } from "../config.js";
 import {
   incrementGeminiUsage,
   markKeyExhausted,
@@ -528,7 +529,7 @@ export async function synthesizeGemini(
   // Order is preserved by writing into a pre-sized array keyed by chunk index.
   // Kept at 2 (not higher) so retry storms from flaky safety blocks don't blow
   // through the Gemini free-tier rate limit.
-  const PARALLEL_CHUNKS = 2;
+  const PARALLEL_CHUNKS = config.geminiPaidTier ? 4 : 2;
   const pcmBuffers = new Array<Buffer>(chunks.length);
   const stats: LossStats = { lostChars: 0 };
   let completed = 0;

@@ -32,6 +32,8 @@ const envSchema = z.object({
   ENCRYPTION_KEY: z.string().optional().default(""),
   /** Comma-separated list of Gemini API keys to rotate through when one exhausts its daily quota. */
   GEMINI_API_KEYS: z.string().optional().default(""),
+  /** Set to "true" once your Google project has billing enabled: lifts the 100/day display cap and speeds up requests. */
+  GEMINI_PAID_TIER: z.string().optional().default(""),
   /** Gemini text model for multi-column OCR reconstruction. Override if the default slug is unavailable. */
   GEMINI_TEXT_MODEL: z.string().optional().default("gemini-3.1-pro"),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional().default(""),
@@ -84,6 +86,7 @@ export const config = {
   geminiApiKey: geminiApiKeys[0] ?? "",
   geminiApiKeys,
   geminiTextModel: env.GEMINI_TEXT_MODEL,
+  geminiPaidTier: /^(1|true|yes)$/i.test(env.GEMINI_PAID_TIER.trim()),
   googleCredentials: env.GOOGLE_APPLICATION_CREDENTIALS,
   azureSpeechKey: env.AZURE_SPEECH_KEY,
   azureSpeechRegion: env.AZURE_SPEECH_REGION,
