@@ -42,7 +42,7 @@ export function PlayerView({ initial }: PlayerViewProps) {
           lastProgressRef.current = next.progress;
           lastProgressAtRef.current = Date.now();
           setIsStuck(false);
-        } else if (Date.now() - lastProgressAtRef.current > 40_000) {
+        } else if (Date.now() - lastProgressAtRef.current > 180_000) {
           setIsStuck(true);
         }
       } catch {
