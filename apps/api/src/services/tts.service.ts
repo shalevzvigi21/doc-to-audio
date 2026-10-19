@@ -379,7 +379,7 @@ function splitInHalf(text: string): [string, string] {
  * @returns the concatenated PCM for the chunk (empty Buffer if every segment
  *          had to be skipped).
  */
-async function synthesizeChunkResilient(text: string, ctx: GeminiKeyContext): Promise<Buffer> {
+async function synthesizeChunkResilient(text: string, ctx: GeminiKeyContext, stats: LossStats): Promise<Buffer> {
   // Strip Latin OCR artifacts (Tesseract misreadings of Hebrew glyphs) from
   // Hebrew-primary text. These embedded English sequences trip Gemini's safety
   // classifier with PROHIBITED_CONTENT on every retry. Cleaning first leaves
@@ -391,7 +391,13 @@ async function synthesizeChunkResilient(text: string, ctx: GeminiKeyContext): Pr
     return Buffer.alloc(0);
   }
 
-  const result = await synthesizeSegment(cleaned, ctx);
+  let result = await synthesizeSegment(cleaned, ctx);
+  // A rate limit is recoverable: wait it out instead of dropping real text.
+  for (let round = 1; result === RATE_LIMITED && round <= RATE_LIMIT_PATIENCE_ROUNDS; round++) {
+    console.warn(`[tts] rate-limited (${cleaned.length} chars) — waiting before retry ${round}/${RATE_LIMIT_PATIENCE_ROUNDS}`);
+    await sleep(RATE_LIMIT_PATIENCE_WAIT_MS);
+    result = await synthesizeSegment(cleaned, ctx);
+  }
   if (result instanceof Buffer) return result;
 
   // Rate-limited even after all retries: the free-tier quota is saturated.
@@ -401,21 +407,48 @@ async function synthesizeChunkResilient(text: string, ctx: GeminiKeyContext): Pr
   // with a clear error.
   if (result === RATE_LIMITED) {
     console.warn(`[tts] skipping rate-limited segment (${text.length} chars) — quota saturated`);
+    stats.lostChars += cleaned.length;
     return Buffer.alloc(0);
   }
 
   // Genuine content block: isolate it by splitting; skip if already small.
   if (cleaned.length <= MIN_SPLIT_CHARS) {
     console.warn(`[tts] skipping un-synthesizable segment (${text.length} chars): "${text.slice(0, 60)}…"`);
+    stats.lostChars += cleaned.length;
     return Buffer.alloc(0);
   }
 
   const [left, right] = splitInHalf(cleaned);
   const [leftPcm, rightPcm] = await Promise.all([
-    synthesizeChunkResilient(left, ctx),
-    synthesizeChunkResilient(right, ctx),
+    synthesizeChunkResilient(left, ctx, stats),
+    synthesizeChunkResilient(right, ctx, stats),
   ]);
   return Buffer.concat([leftPcm, rightPcm]);
+}
+
+/** Running tally of real prose that could not be turned into audio (blocked or rate-limited). */
+interface LossStats {
+  lostChars: number;
+}
+
+/** More than this share of the text missing from the audio means the result is not trustworthy. */
+const MAX_LOSS_RATIO = 0.03;
+/** Extra patient rounds for a chunk that keeps hitting a rate limit, before giving up on it. */
+const RATE_LIMIT_PATIENCE_ROUNDS = 6;
+const RATE_LIMIT_PATIENCE_WAIT_MS = 30_000;
+
+/**
+ * Thrown when too much of the document is missing from the generated audio.
+ * Failing is better than reporting success on an audio file that skips pages.
+ */
+export class IncompleteAudioError extends UnretryableQuotaError {
+  constructor(public readonly coveragePercent: number) {
+    super(
+      `Only ${coveragePercent}% of the text could be converted (the rest was blocked or rate-limited by Gemini). ` +
+        "Wait a few minutes and press restart; if it keeps happening your daily Gemini quota is probably nearly used up.",
+    );
+    this.name = "IncompleteAudioError";
+  }
 }
 
 /** Encode raw 16-bit mono PCM to MP3 with ffmpeg. */
@@ -497,6 +530,7 @@ export async function synthesizeGemini(
   // through the Gemini free-tier rate limit.
   const PARALLEL_CHUNKS = 2;
   const pcmBuffers = new Array<Buffer>(chunks.length);
+  const stats: LossStats = { lostChars: 0 };
   let completed = 0;
 
   for (let start = 0; start < chunks.length; start += PARALLEL_CHUNKS) {
@@ -506,17 +540,28 @@ export async function synthesizeGemini(
     );
     await Promise.all(
       batchIndices.map(async (i) => {
-        pcmBuffers[i] = await synthesizeChunkResilient(chunks[i], ctx);
+        pcmBuffers[i] = await synthesizeChunkResilient(chunks[i], ctx, stats);
         completed++;
         await onProgress?.(completed / chunks.length);
       }),
     );
   }
 
-  // Only fail if the entire document came back empty; a few skipped segments
-  // are tolerated so one stuck sentence can't sink a whole conversion.
+  // Fail if the entire document came back empty. A small amount of lost text
+  // (<= MAX_LOSS_RATIO) is tolerated so one stuck sentence can't sink a conversion.
   if (pcmBuffers.every((b) => b.length === 0)) {
     throw new Error("Gemini TTS produced no audio for any chunk");
+  }
+
+  const totalChars = chunks.reduce((n, c) => n + c.length, 0);
+  const lostRatio = totalChars > 0 ? stats.lostChars / totalChars : 0;
+  if (lostRatio > MAX_LOSS_RATIO) {
+    const coverage = Math.max(0, Math.round((1 - lostRatio) * 100));
+    console.error(`[tts] audio would cover only ${coverage}% of the text — failing instead of saving a truncated file`);
+    throw new IncompleteAudioError(coverage);
+  }
+  if (stats.lostChars > 0) {
+    console.warn(`[tts] ${stats.lostChars} of ${totalChars} chars could not be synthesized (${(lostRatio * 100).toFixed(1)}%)`);
   }
 
   return encodePcmToMp3(pcmBuffers, outputPath);
