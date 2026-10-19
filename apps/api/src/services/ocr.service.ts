@@ -4,6 +4,10 @@ import path from "node:path";
 import tesseract from "node-tesseract-ocr";
 import sharp from "sharp";
 import { fromPath } from "pdf2pic";
+import mammoth from "mammoth";
+
+/** Extensions read directly as UTF-8 text — no OCR involved. */
+const PLAIN_TEXT_EXTENSIONS = new Set([".txt", ".md"]);
 
 /** Tesseract options: Hebrew + English, LSTM engine (oem 1), uniform block (psm 6). */
 const TESSERACT_CONFIG = {
@@ -91,13 +95,15 @@ function cleanOcrText(text: string): string {
 }
 
 /**
- * Extract text from a document via OCR, **one cleaned string per page**.
+ * Extract text from a document, **one cleaned string per page**.
  *
- * 1. PDFs are rasterised page-by-page to PNG (300 DPI); other inputs are
- *    treated as a single image.
- * 2. Each page image is cleaned with sharp (grayscale/normalize/threshold).
- * 3. Tesseract recognises Hebrew + English text per page.
- * 4. Each page's text is noise-filtered with `cleanOcrText` (line-based, so it
+ * 1. Plain text (.txt/.md) is read directly; .docx is parsed with mammoth.
+ *    Neither goes through OCR.
+ * 2. PDFs are rasterised page-by-page to PNG (300 DPI); any other (image)
+ *    input is treated as a single image.
+ * 3. Each page image is cleaned with sharp (grayscale/normalize/threshold).
+ * 4. Tesseract recognises Hebrew + English text per page.
+ * 5. Each page's text is noise-filtered with `cleanOcrText` (line-based, so it
  *    is safe to apply per page).
  *
  * Returning per-page text lets the multi-column reconstruction step operate on
@@ -108,10 +114,23 @@ export async function extractTextPages(
   filePath: string,
   onProgress?: (fraction: number) => void | Promise<void>,
 ): Promise<string[]> {
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (PLAIN_TEXT_EXTENSIONS.has(ext)) {
+    const text = await readFile(filePath, "utf-8");
+    await onProgress?.(1);
+    return [text];
+  }
+
+  if (ext === ".docx") {
+    const { value: text } = await mammoth.extractRawText({ path: filePath });
+    await onProgress?.(1);
+    return [text];
+  }
+
   const workDir = await mkdtemp(path.join(tmpdir(), "doc2audio-ocr-"));
 
   try {
-    const ext = path.extname(filePath).toLowerCase();
     const pageImages =
       ext === ".pdf"
         ? await pdfToImageBuffers(filePath, workDir)

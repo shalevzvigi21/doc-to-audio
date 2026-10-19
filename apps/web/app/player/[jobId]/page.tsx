@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowRight, FileText } from "lucide-react";
+import { ArrowRight, ExternalLink, FileText } from "lucide-react";
 import type { JobStatusResponse } from "@doc-to-audio/types";
 import { apiFetch, ApiError } from "@/lib/api";
 import { PlayerView } from "@/components/PlayerView";
@@ -50,6 +50,15 @@ export default async function PlayerPage({ params }: { params: { jobId: string }
           <div className="mt-2">
             <PlayerView initial={job} />
           </div>
+          <a
+            href={`/api/files/${job.fileId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-secondary text-sm font-medium hover:bg-secondary/80"
+          >
+            <ExternalLink className="h-4 w-4" />
+            {he.player.openDoc}
+          </a>
         </div>
 
         <details className="group rounded-[24px] border bg-card">

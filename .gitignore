@@ -43,3 +43,6 @@ coverage/
 .vercel
 .env*
 !.env.example
+
+# Local process-manager config (machine-specific absolute paths)
+pm2.config.cjs

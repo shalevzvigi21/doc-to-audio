@@ -111,19 +111,44 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const RATE_LIMITED = Symbol("rate-limited");
 
 /**
+ * Base for Gemini failures that won't recover within the lifetime of a
+ * conversion job — retrying or continuing only wastes effort, so the worker
+ * aborts the whole conversion immediately instead of exhausting MAX_TTS_ATTEMPTS
+ * per chunk and failing with a vague "no audio for any chunk" error.
+ */
+export class UnretryableQuotaError extends Error {}
+
+/**
  * Thrown when Gemini returns a 429 for the **per-day** free-tier cap
  * (`generate_requests_per_model_per_day`, limit 100). Unlike a per-minute
  * spike this will not recover for hours, so retrying or continuing only wastes
  * effort — we abort the whole conversion and surface a clear, actionable
  * message (with the API-reported reset time) instead.
  */
-export class DailyQuotaError extends Error {
+export class DailyQuotaError extends UnretryableQuotaError {
   constructor(public readonly retryIn?: string) {
     super(
       `Daily Gemini TTS quota (100 requests/day on the free tier) is exhausted.` +
         (retryIn ? ` Resets in ${retryIn}.` : ""),
     );
     this.name = "DailyQuotaError";
+  }
+}
+
+/**
+ * Thrown when Gemini returns 429 RESOURCE_EXHAUSTED for depleted **prepaid
+ * billing credits** (paid-tier project, not the free-tier per-day cap). This
+ * only recovers once the user adds funds in AI Studio, so — like
+ * DailyQuotaError — it must not be retried or misreported as a transient
+ * rate limit.
+ */
+export class BillingExhaustedError extends UnretryableQuotaError {
+  constructor() {
+    super(
+      "Gemini TTS billing credits are depleted. Add funds at " +
+        "https://ai.studio/projects to resume conversions.",
+    );
+    this.name = "BillingExhaustedError";
   }
 }
 
@@ -196,6 +221,13 @@ async function requestChunk(
         // Recurse: getActiveKeyIndex() will now skip this key and pick the next.
         // If no key is left, the recursive call throws DailyQuotaError.
         return requestChunk(text, ctx);
+      }
+      // Paid-tier billing exhaustion reports RESOURCE_EXHAUSTED with no
+      // per-day wording — distinct from both the free-tier cap above and a
+      // transient per-minute spike below, and just as unrecoverable within
+      // this job's lifetime.
+      if (/RESOURCE_EXHAUSTED/i.test(body) && /prepay|credits|billing/i.test(body)) {
+        throw new BillingExhaustedError();
       }
       return RATE_LIMITED; // per-minute spike — transient, retry with backoff
     }

@@ -10,7 +10,7 @@ import type { ConversionJobData } from "../queue/conversionQueue.js";
 import { extractTextPages } from "../services/ocr.service.js";
 import { reconstructPageColumns } from "../services/text-reconstruction.service.js";
 import { cleanTextForReading } from "../services/text-cleaner.service.js";
-import { synthesizeGemini, DailyQuotaError } from "../services/tts.service.js";
+import { synthesizeGemini, UnretryableQuotaError } from "../services/tts.service.js";
 import { MissingGeminiKeyError, resolveGeminiContext } from "../services/gemini-keys.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
 import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
@@ -119,13 +119,15 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
       `[conversion] file ${fileId} done — ${duration.toFixed(1)}s (${file.name})`,
     );
   } catch (err) {
+    // Never downgrade a file that already finished: a duplicate/stale run
+    // failing late must not hide good audio from an earlier successful run.
     await prisma.file
-      .update({ where: { id: fileId }, data: { status: "ERROR" } })
+      .updateMany({ where: { id: fileId, status: { not: "DONE" } }, data: { status: "ERROR" } })
       .catch(() => undefined);
     console.error(`[conversion] file ${fileId} failed:`, err);
 
-    if (err instanceof DailyQuotaError) {
-      console.error(`[conversion] daily Gemini quota exhausted — not retrying. ${err.message}`);
+    if (err instanceof UnretryableQuotaError) {
+      console.error(`[conversion] Gemini quota unrecoverable — not retrying. ${err.message}`);
       return;
     }
     if (err instanceof MissingGeminiKeyError) {
@@ -149,9 +151,12 @@ export function startConversionWorker(): Worker<ConversionJobData> {
   const worker = new Worker<ConversionJobData>(CONVERSION_QUEUE_NAME, processConversion, {
     connection: connection.duplicate(),
     concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
-    stalledInterval: 15_000,  // re-queue stalled jobs every 15s (default: 30s)
-    lockDuration: 30_000,     // lock expires after 30s if worker dies
-    lockRenewTime: 10_000,    // renew lock every 10s to stay alive
+    // OCR/ffmpeg work can starve the event loop for tens of seconds. A short lock
+    // made BullMQ think the job stalled and re-run it while the first run was
+    // still calling Gemini, double-spending the daily quota.
+    stalledInterval: 60_000,
+    lockDuration: 300_000,    // lock expires after 5 min if the worker really dies
+    lockRenewTime: 30_000,
   });
 
   worker.on("completed", (job) => {
