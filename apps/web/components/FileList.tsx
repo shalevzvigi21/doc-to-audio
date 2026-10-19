@@ -195,6 +195,7 @@ function FileRow({
     position: file.audioJob?.lastPosition ?? 0,
     persist: true,
     subtitle,
+    doc: { fileId: file.id, mimeType: file.mimeType, name: file.name },
   });
   const togglePlay = () => player.load(track(), { autoplay: true });
   const openPlayer = () => {

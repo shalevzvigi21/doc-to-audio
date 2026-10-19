@@ -13,6 +13,8 @@ export interface Track {
   persist: boolean;
   /** Small line under the title, e.g. "PDF · לימודים". */
   subtitle?: string;
+  /** Original document, shown inside the player. Omitted on the public share page. */
+  doc?: { fileId: string; mimeType: string; name: string };
 }
 
 export interface PlayerContextValue {

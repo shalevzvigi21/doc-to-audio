@@ -163,6 +163,7 @@ export function PlayerView({ initial }: PlayerViewProps) {
         duration: job.duration,
         position: job.lastPosition,
         persist: true,
+        doc: { fileId: job.fileId, mimeType: job.mimeType, name: job.fileName },
       }}
     />
   );

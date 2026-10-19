@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Download, Link2, Pause, Play, RotateCcw, RotateCw } from "lucide-react";
+import { ChevronDown, Download, ExternalLink, FileText, Link2, Pause, Play, RotateCcw, RotateCw } from "lucide-react";
 import { cn, formatClock } from "@/lib/utils";
 import { he } from "@/lib/strings";
 import { usePlayer } from "@/components/player/context";
@@ -23,6 +23,7 @@ export function PlayerCard({
   const p = usePlayer();
   const { track, playing, current, total, speed } = p;
   const [copied, setCopied] = useState(false);
+  const [docOpen, setDocOpen] = useState(false);
 
   useEffect(() => {
     if (variant !== "inline") return;
@@ -148,6 +149,41 @@ export function PlayerCard({
           </a>
         </div>
       </div>
+      {track.doc && (
+        <div className="mt-4 border-t pt-4">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setDocOpen((v) => !v)}
+              aria-expanded={docOpen}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-secondary text-sm font-medium hover:bg-secondary/80"
+            >
+              <FileText className="h-4 w-4" />
+              {docOpen ? he.player.hideDoc : he.player.showDoc}
+            </button>
+            <a
+              href={`/api/files/${track.doc.fileId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={he.player.openDoc}
+              title={he.player.openDoc}
+              className="grid h-10 w-10 place-items-center rounded-xl bg-secondary hover:bg-secondary/80"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </div>
+          {docOpen &&
+            (track.doc.mimeType === "application/pdf" ? (
+              <iframe
+                src={`/api/files/${track.doc.fileId}`}
+                title={track.doc.name}
+                className="mt-3 h-[60vh] w-full rounded-xl border"
+              />
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">{he.player.viewDocUnsupported}</p>
+            ))}
+        </div>
+      )}
       {variant === "sheet" && track.persist && (
         <p className="mt-4 text-center text-xs text-muted-foreground">{he.audio.autosave}</p>
       )}
