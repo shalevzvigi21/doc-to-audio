@@ -65,8 +65,12 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
 
   if (gemini.exhausted) {
     return (
-      <div
-        className={cn(pill, "border-destructive/40 bg-destructive/10 text-destructive")}
+      // A button, not plain text: the quickest way out of an exhausted shared key is adding your own.
+      <button
+        type="button"
+        onClick={openGeminiSetup}
+        aria-label={he.gemini.openAria}
+        className={cn(pill, "border-destructive/40 bg-destructive/10 text-destructive hover:brightness-95")}
         title={azureAvailable ? he.tts.azureHint : he.tts.azureUnavailable}
       >
         <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -74,7 +78,10 @@ export function GeminiQuota({ initial }: { initial: TtsQuotaResponse | null }) {
           {he.tts.exhausted}
           {gemini.resetsInSeconds != null && ` · ${he.tts.resetsInPrefix} ${formatReset(gemini.resetsInSeconds)}`}
         </span>
-      </div>
+        {geminiKey?.source !== "user" && (
+          <span className="rounded-full bg-destructive px-2 py-px text-xs text-background">{he.gemini.pillAddOwn}</span>
+        )}
+      </button>
     );
   }
 

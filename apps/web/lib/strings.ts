@@ -129,6 +129,7 @@ export const he = {
   gemini: {
     pillMissing: "חסר מפתח Gemini",
     pillAdd: "הוספה",
+    pillAddOwn: "מפתח אישי",
     pillKey: (last4: string) => `מפתח ••••${last4}`,
     pillServerKey: "מפתח השרת",
     openAria: "הגדרות מפתח Gemini",
