@@ -13,6 +13,7 @@ import { cleanTextForReading } from "../services/text-cleaner.service.js";
 import { synthesizeGemini, UnretryableQuotaError } from "../services/tts.service.js";
 import { MissingGeminiKeyError, resolveGeminiContext } from "../services/gemini-keys.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
+import { logUserError } from "../lib/error-log.js";
 import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
 
 /**
@@ -125,6 +126,7 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
       .updateMany({ where: { id: fileId, status: { not: "DONE" } }, data: { status: "ERROR" } })
       .catch(() => undefined);
     console.error(`[conversion] file ${fileId} failed:`, err);
+    void logUserError(userId, `conversion of "${file.name}"`, err);
 
     if (err instanceof UnretryableQuotaError) {
       console.error(`[conversion] Gemini quota unrecoverable — not retrying. ${err.message}`);

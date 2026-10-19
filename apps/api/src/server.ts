@@ -10,6 +10,8 @@ import jobsRoutes from "./routes/jobs.js";
 import audioRoutes from "./routes/audio.js";
 import ttsRoutes from "./routes/tts.js";
 import geminiKeyRoutes from "./routes/gemini-key.js";
+import diagnosticsRoutes from "./routes/diagnostics.js";
+import { logUserError } from "./lib/error-log.js";
 
 /** Build and configure the Fastify instance (without starting to listen). */
 export async function buildServer(): Promise<FastifyInstance> {
@@ -49,10 +51,14 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(audioRoutes);
   await app.register(ttsRoutes);
   await app.register(geminiKeyRoutes);
+  await app.register(diagnosticsRoutes);
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);
     const statusCode = error.statusCode ?? 500;
+    if (statusCode >= 500 && request.user) {
+      void logUserError(request.user.id, `${request.method} ${request.url.split("?")[0]}`, error);
+    }
     reply.code(statusCode).send({
       statusCode,
       error: error.name ?? "Internal Server Error",

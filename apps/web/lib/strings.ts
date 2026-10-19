@@ -120,6 +120,12 @@ export const he = {
     loading: "טוען מכסה…",
   },
 
+  report: {
+    button: "דיווח על תקלה",
+    done: (email: string) => `הורד קובץ דיווח. אם חלון המייל לא נפתח, שלחו אותו אל ${email}.`,
+    rights: "All rights reserved.",
+  },
+
   gemini: {
     pillMissing: "חסר מפתח Gemini",
     pillAdd: "הוספה",

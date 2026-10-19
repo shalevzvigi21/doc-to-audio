@@ -4,6 +4,7 @@ import "./globals.css";
 import { he } from "@/lib/strings";
 import { PlayerProvider } from "@/components/player/PlayerProvider";
 import { GeminiSetup } from "@/components/GeminiSetup";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const rubik = Rubik({ subsets: ["hebrew", "latin"] });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["500"] });
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={`${rubik.className} ${mono.variable} min-h-screen bg-background antialiased`}>
-        <PlayerProvider>{children}</PlayerProvider>
+        <PlayerProvider>
+          {children}
+          <SiteFooter />
+        </PlayerProvider>
         <GeminiSetup />
       </body>
     </html>
