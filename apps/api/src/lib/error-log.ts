@@ -6,7 +6,7 @@ const TTL_SECONDS = 30 * 24 * 60 * 60;
 /** Strip anything secret-looking before an error leaves the server in a report. */
 export function redact(text: string): string {
   return text
-    .replace(/AIza[0-9A-Za-z_-]{30,}/g, "[gemini-key]")
+    .replace(/(AIza[0-9A-Za-z_-]{30,}|AQ\.[0-9A-Za-z_.-]{30,})/g, "[gemini-key]")
     .replace(/eyJ[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]+\.[0-9A-Za-z_-]+/g, "[token]")
     .replace(/Bearer\s+[0-9A-Za-z._-]+/gi, "Bearer [token]")
     .replace(/(x-goog-api-key|api[_-]?key)["'\s:=]+[0-9A-Za-z_-]{16,}/gi, "$1=[redacted]");

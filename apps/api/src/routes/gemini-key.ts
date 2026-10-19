@@ -8,7 +8,6 @@ import { requireUser, badRequest } from "../lib/http.js";
 import { validateGeminiKey, userScope } from "../services/gemini-keys.service.js";
 import { resetGeminiScope } from "../services/tts-usage.service.js";
 
-// Google AI Studio keys look like "AIza…" (39 chars); allow some slack for format changes.
 /**
  * Pasted keys often arrive wrapped in junk: a "GEMINI_API_KEY=" prefix from an
  * .env file, quotes, or stray spaces/line breaks. Strip those before checking.
@@ -20,12 +19,12 @@ function cleanPastedKey(value: unknown): unknown {
     .replace(/["'`\s\u200e\u200f\u202a-\u202e]/g, "");
 }
 
-// Google AI Studio keys look like "AIza…" (39 chars); allow some slack for format changes.
+// Google AI Studio keys look like "AIza…" (39 chars) or the newer "AQ.…" form (contains a dot); allow some slack for format changes.
 const keySchema = z.object({
   apiKey: z
     .preprocess(cleanPastedKey, z.string())
     .pipe(z.string())
-    .pipe(z.string().regex(/^[A-Za-z0-9_-]{20,128}$/, "The key looks wrong. Copy it again from Google AI Studio.")),
+    .pipe(z.string().regex(/^[A-Za-z0-9_.-]{20,128}$/, "The key looks wrong. Copy it again from Google AI Studio.")),
 });
 
 async function statusFor(userId: string): Promise<GeminiKeyStatus> {

@@ -149,7 +149,7 @@ export const he = {
       },
       {
         title: "מעתיקים את המפתח",
-        body: "זו שורה ארוכה של אותיות ומספרים שמתחילה ב-AIza.",
+        body: "זו שורה ארוכה של אותיות ומספרים שמתחילה ב-AIza או ב-AQ. (מפתחות חדשים של גוגל).",
       },
       {
         title: "מדביקים כאן ושומרים",
@@ -158,7 +158,7 @@ export const he = {
     ],
     openStudio: "פתיחת Google AI Studio",
     keyLabel: "מפתח Gemini API",
-    keyPlaceholder: "AIza…",
+    keyPlaceholder: "AIza… / AQ.…",
     save: "שמירה ובדיקה",
     saving: "בודק…",
     later: "אחר כך",
