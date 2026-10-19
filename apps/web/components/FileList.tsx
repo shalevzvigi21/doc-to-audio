@@ -458,6 +458,20 @@ function FileRow({
               </span>
               {he.file.multiColumn}
             </button>
+            <details className="max-w-[320px] text-xs">
+              <summary className="cursor-pointer select-none text-primary">{he.file.multiColumnHelpTitle}</summary>
+              <div className="mt-1.5 space-y-1.5 leading-relaxed">
+                <p className="font-medium text-foreground">{he.file.multiColumnHelpOn}</p>
+                <ul className="list-disc space-y-0.5 ps-4">
+                  {he.file.multiColumnHelpOnItems.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+                <p>{he.file.multiColumnHelpOff}</p>
+                <p>{he.file.multiColumnHelpWhy}</p>
+                <p className="text-warn">{he.file.multiColumnHelpCost}</p>
+              </div>
+            </details>
           </div>
 
           <div className="flex flex-col items-start gap-1 max-sm:w-full sm:ms-auto">
