@@ -13,7 +13,7 @@ import { resolveGeminiContext } from "../services/gemini-keys.service.js";
 
 const createJobSchema = z.object({
   fileId: z.string().cuid("A valid fileId is required"),
-  provider: z.enum(["gemini", "azure"]).optional().default("gemini"),
+  provider: z.enum(["gemini", "azure", "openai"]).optional().default("gemini"),
   reconstructColumns: z.boolean().optional().default(false),
 });
 
@@ -33,6 +33,9 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { provider, reconstructColumns } = parsed.data;
+    if (provider === "openai" && !config.openaiConfigured) {
+      return badRequest(reply, "OpenAI TTS is not configured on the server");
+    }
     if (provider === "azure" && !config.azureConfigured) {
       return badRequest(reply, "Azure TTS is not configured on the server");
     }

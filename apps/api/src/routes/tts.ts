@@ -26,6 +26,7 @@ const ttsRoutes: FastifyPluginAsync = async (fastify) => {
     const body: TtsQuotaResponse = {
       gemini,
       azureAvailable: config.azureConfigured,
+      openaiAvailable: config.openaiConfigured,
       geminiKey: { source: ctx?.source ?? "none", last4: saved?.geminiKeyLast4 ?? null },
     };
     return reply.send(body);

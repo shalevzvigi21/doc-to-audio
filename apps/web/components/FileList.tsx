@@ -57,10 +57,12 @@ function FileRow({
   item,
   allFolders,
   azureAvailable,
+  openaiAvailable,
 }: {
   item: LibraryItem;
   allFolders: FlatFolder[];
   azureAvailable: boolean;
+  openaiAvailable: boolean;
 }) {
   const { file, folderName } = item;
   const router = useRouter();
@@ -418,20 +420,32 @@ function FileRow({
           <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
             {he.file.engine}
             <div role="group" className="inline-flex rounded-xl bg-secondary p-[3px]">
-              {(["gemini", "azure"] as const).map((p) => (
+              {(["gemini", "openai", "azure"] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
                   aria-pressed={provider === p}
-                  disabled={isPending || (p === "azure" && !azureAvailable)}
-                  title={p === "azure" && !azureAvailable ? he.tts.azureUnavailable : undefined}
+                  disabled={
+                    isPending || (p === "azure" && !azureAvailable) || (p === "openai" && !openaiAvailable)
+                  }
+                  title={
+                    p === "azure" && !azureAvailable
+                      ? he.tts.azureUnavailable
+                      : p === "openai" && !openaiAvailable
+                        ? he.tts.openaiUnavailable
+                        : undefined
+                  }
                   onClick={() => setProvider(p)}
                   className={cn(
                     "rounded-[9px] px-4 py-1.5 text-sm text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40",
                     provider === p && "bg-card text-foreground shadow-sm",
                   )}
                 >
-                  {p === "gemini" ? he.file.providerGemini : he.file.providerAzure}
+                  {p === "gemini"
+                    ? he.file.providerGemini
+                    : p === "openai"
+                      ? he.file.providerOpenAI
+                      : he.file.providerAzure}
                 </button>
               ))}
             </div>
@@ -526,10 +540,12 @@ export function FileList({
   items,
   allFolders,
   azureAvailable = false,
+  openaiAvailable = false,
 }: {
   items: LibraryItem[];
   allFolders: FlatFolder[];
   azureAvailable?: boolean;
+  openaiAvailable?: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -542,7 +558,10 @@ export function FileList({
   return (
     <div className="mt-3.5 flex flex-col gap-2">
       {items.map((item) => (
-        <FileRow key={item.file.id} item={item} allFolders={allFolders} azureAvailable={azureAvailable} />
+        <FileRow key={item.file.id} item={item} allFolders={allFolders}
+          azureAvailable={azureAvailable}
+          openaiAvailable={openaiAvailable}
+        />
       ))}
     </div>
   );

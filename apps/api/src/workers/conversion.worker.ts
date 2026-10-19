@@ -13,6 +13,7 @@ import { cleanTextForReading } from "../services/text-cleaner.service.js";
 import { synthesizeGemini, UnretryableQuotaError } from "../services/tts.service.js";
 import { MissingGeminiKeyError, resolveGeminiContext } from "../services/gemini-keys.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
+import { synthesizeOpenAI } from "../services/openai-tts.service.js";
 import { logUserError } from "../lib/error-log.js";
 import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
 
@@ -96,7 +97,9 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
     localMp3Path = path.join(tmpWorkDir, `${fileId}.mp3`);
 
     let duration: number;
-    if (provider === "azure") {
+    if (provider === "openai") {
+      duration = await synthesizeOpenAI(text, localMp3Path, (f) => setProgress(70 + f * 25));
+    } else if (provider === "azure") {
       duration = await synthesizeAzure(text, localMp3Path, (f) => setProgress(70 + f * 25));
     } else {
       if (!geminiCtx) throw new MissingGeminiKeyError();
@@ -169,6 +172,6 @@ export function startConversionWorker(): Worker<ConversionJobData> {
     console.error(`[conversion] failed job ${job?.id}:`, err.message);
   });
 
-  console.log(`[conversion] worker listening on queue "${CONVERSION_QUEUE_NAME}" (tts: multi-provider gemini+azure)`);
+  console.log(`[conversion] worker listening on queue "${CONVERSION_QUEUE_NAME}" (tts: multi-provider gemini+azure+openai)`);
   return worker;
 }

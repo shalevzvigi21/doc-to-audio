@@ -56,6 +56,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
 
   const quota = await apiFetch<TtsQuotaResponse>("/tts/quota").catch(() => null);
   const azureAvailable = quota?.azureAvailable ?? false;
+  const openaiAvailable = quota?.openaiAvailable ?? false;
   const allFolders = flattenFolders(tree.folders);
 
   const selected = searchParams.folder ? findFolder(tree.folders, searchParams.folder) : undefined;
@@ -115,7 +116,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
 
       {selected && <FolderActions folderId={selected.id} name={selected.name} convertibleIds={convertibleIds} />}
 
-      <FileList items={items} allFolders={allFolders} azureAvailable={azureAvailable} />
+      <FileList items={items} allFolders={allFolders} azureAvailable={azureAvailable} openaiAvailable={openaiAvailable} />
     </div>
   );
 }

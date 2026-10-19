@@ -42,6 +42,10 @@ const envSchema = z.object({
   AZURE_SPEECH_KEY: z.string().optional().default(""),
   AZURE_SPEECH_REGION: z.string().optional().default(""),
   AZURE_SPEECH_VOICE: z.string().optional().default("he-IL-AvriNeural"),
+  // OpenAI text-to-speech (optional engine). Only the key is required.
+  OPENAI_API_KEY: z.string().optional().default(""),
+  OPENAI_TTS_MODEL: z.string().optional().default("gpt-4o-mini-tts"),
+  OPENAI_TTS_VOICE: z.string().optional().default("onyx"),
   HOST: z.string().default("0.0.0.0"),
   PORT: z.coerce.number().default(4000),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
@@ -91,6 +95,11 @@ export const config = {
   azureSpeechKey: env.AZURE_SPEECH_KEY,
   azureSpeechRegion: env.AZURE_SPEECH_REGION,
   azureSpeechVoice: env.AZURE_SPEECH_VOICE,
+  openaiApiKey: env.OPENAI_API_KEY.trim(),
+  openaiTtsModel: env.OPENAI_TTS_MODEL.trim(),
+  openaiTtsVoice: env.OPENAI_TTS_VOICE.trim(),
+  /** True when an OpenAI key is set (so OpenAI can be offered). */
+  openaiConfigured: Boolean(env.OPENAI_API_KEY.trim()),
   /** True only when Azure Speech is fully configured (key + region). */
   azureConfigured: Boolean(env.AZURE_SPEECH_KEY && env.AZURE_SPEECH_REGION),
   host: env.HOST,

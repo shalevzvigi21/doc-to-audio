@@ -104,7 +104,7 @@ export interface CreateFolderResponse {
 /* ----------------------------- Job payloads ------------------------------ */
 
 /** Which text-to-speech engine to use for a conversion. */
-export type TtsProvider = "gemini" | "azure";
+export type TtsProvider = "gemini" | "azure" | "openai";
 
 export interface CreateJobBody {
   fileId: string;
@@ -159,6 +159,8 @@ export interface TtsQuotaResponse {
   };
   /** Whether an Azure Speech key is configured (so Azure can be offered). */
   azureAvailable: boolean;
+  /** Whether an OpenAI key is configured (so OpenAI can be offered). */
+  openaiAvailable?: boolean;
   /** Which Gemini key conversions will use for this user. */
   geminiKey: GeminiKeyStatus;
 }
