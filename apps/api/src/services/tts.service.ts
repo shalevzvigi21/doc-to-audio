@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpeg from "fluent-ffmpeg";
 import { config } from "../config.js";
+import { redact } from "../lib/error-log.js";
 import {
   incrementGeminiUsage,
   markKeyExhausted,
@@ -119,6 +120,9 @@ const RATE_LIMITED = Symbol("rate-limited");
  */
 export class UnretryableQuotaError extends Error {}
 
+/** Google's own wording of the latest per-day 429, per key scope, so errors can say why. */
+const lastDailyDetail = new Map<string, string>();
+
 /**
  * Thrown when Gemini returns a 429 for the **per-day** free-tier cap
  * (`generate_requests_per_model_per_day`, limit 100). Unlike a per-minute
@@ -127,10 +131,11 @@ export class UnretryableQuotaError extends Error {}
  * message (with the API-reported reset time) instead.
  */
 export class DailyQuotaError extends UnretryableQuotaError {
-  constructor(public readonly retryIn?: string) {
+  constructor(public readonly retryIn?: string, detail?: string) {
     super(
       `Daily Gemini TTS quota (100 requests/day on the free tier) is exhausted.` +
-        (retryIn ? ` Resets in ${retryIn}.` : ""),
+        (retryIn ? ` Resets in ${retryIn}.` : "") +
+        (detail ? ` Google said: ${detail}` : ""),
     );
     this.name = "DailyQuotaError";
   }
@@ -183,7 +188,7 @@ async function requestChunk(
   // exhausted we throw immediately so the worker surfaces a clear error.
   const keyIndex = await getActiveKeyIndex(ctx);
   if (keyIndex === -1) {
-    throw new DailyQuotaError();
+    throw new DailyQuotaError(undefined, lastDailyDetail.get(ctx.scope));
   }
   const apiKey = ctx.keys[keyIndex];
 
@@ -217,6 +222,9 @@ async function requestChunk(
       // Distinguish the per-DAY free-tier cap from a transient per-minute spike.
       if (/per_?day|PerDay|RequestsPerDay/i.test(body)) {
         const resetSeconds = parseRetrySeconds(body);
+        const detail = redact(body.replace(/\s+/g, " ")).slice(0, 700);
+        lastDailyDetail.set(ctx.scope, detail);
+        console.warn(`[tts] Gemini per-day 429: ${detail}`);
         await markKeyExhausted(ctx, keyIndex, resetSeconds);
         console.info(`[tts] key[${keyIndex}] daily quota exhausted — rotating to next key`);
         // Recurse: getActiveKeyIndex() will now skip this key and pick the next.
