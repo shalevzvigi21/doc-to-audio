@@ -10,6 +10,9 @@ export interface ConversionJobData {
   provider?: TtsProvider;
   /** Reorder multi-column (newspaper) layouts via Gemini before TTS. Defaults to false. */
   reconstructColumns?: boolean;
+  /** OpenAI only: which model and voice to use (validated by resolveOpenAIChoice). */
+  openaiModel?: string;
+  openaiVoice?: string;
 }
 
 /**

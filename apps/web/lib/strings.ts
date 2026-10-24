@@ -123,6 +123,17 @@ export const he = {
     loading: "טוען מכסה…",
   },
 
+  openai: {
+    model: "מודל",
+    voice: "קול",
+    perPage: "לעמוד",
+    aboutPrefix: "כ-",
+    recommended: "מומלץ",
+    voiceSamePrice: "המחיר לא תלוי בקול שתבחרו.",
+    priceNote: (chars: string, asOf: string) =>
+      `הערכה בלבד, לעמוד של כ-${chars} תווים (מחירי OpenAI נכון ל${asOf}, בדולרים, לפני מע״מ). עמוד צפוף יותר יעלה יותר. החיוב האמיתי מופיע בחשבון OpenAI שלכם.`,
+  },
+
   report: {
     button: "דיווח על תקלה",
     done: (email: string) => `הורד קובץ דיווח. אם חלון המייל לא נפתח, שלחו אותו אל ${email}.`,

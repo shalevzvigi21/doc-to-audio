@@ -10,11 +10,15 @@ import { conversionQueue } from "../queue/conversionQueue.js";
 import { config } from "../config.js";
 import { requireUser, notFound, badRequest } from "../lib/http.js";
 import { resolveGeminiContext } from "../services/gemini-keys.service.js";
+import { resolveOpenAIChoice, OpenAIChoiceError } from "../services/openai-catalog.js";
 
 const createJobSchema = z.object({
   fileId: z.string().cuid("A valid fileId is required"),
   provider: z.enum(["gemini", "azure", "openai"]).optional().default("gemini"),
   reconstructColumns: z.boolean().optional().default(false),
+  /** OpenAI only. Checked against the catalog below; ignored for other engines. */
+  model: z.string().max(40).optional(),
+  voice: z.string().max(40).optional(),
 });
 
 const positionSchema = z.object({
@@ -33,6 +37,15 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const { provider, reconstructColumns } = parsed.data;
+    let openaiChoice: { model: string; voice: string } | null = null;
+    if (provider === "openai") {
+      try {
+        openaiChoice = resolveOpenAIChoice(parsed.data.model, parsed.data.voice);
+      } catch (err) {
+        if (err instanceof OpenAIChoiceError) return badRequest(reply, err.message);
+        throw err;
+      }
+    }
     if (provider === "openai" && !config.openaiConfigured) {
       return badRequest(reply, "OpenAI TTS is not configured on the server");
     }
@@ -80,7 +93,14 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
     // Do NOT pin the BullMQ job to audioJob.id. If the previous job couldn't
     // be removed (stalled/active state), using the same jobId would cause BullMQ
     // to silently drop the add() call, leaving the file stuck in PENDING forever.
-    await conversionQueue.add("convert", { fileId: file.id, userId: user.id, provider, reconstructColumns });
+    await conversionQueue.add("convert", {
+      fileId: file.id,
+      userId: user.id,
+      provider,
+      reconstructColumns,
+      openaiModel: openaiChoice?.model,
+      openaiVoice: openaiChoice?.voice,
+    });
 
     const body: CreateJobResponse = {
       jobId: audioJob.id,

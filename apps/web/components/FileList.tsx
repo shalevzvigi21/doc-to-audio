@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { deleteFileAction, moveFileAction, queueFileAction, renameFileAction } from "@/lib/actions/library";
 import { usePlayer } from "@/components/player/context";
 import { openGeminiSetup } from "@/components/GeminiSetup";
+import { OpenAIVoicePicker, useOpenAIChoice } from "@/components/OpenAIVoicePicker";
 import { cn, formatClock, relativeDate } from "@/lib/utils";
 import { he } from "@/lib/strings";
 
@@ -106,14 +107,16 @@ function FileRow({
 
   // Convert drawer
   const [drawer, setDrawer] = useState(false);
-  const [provider, setProvider] = useState<TtsProvider>("gemini");
+  // OpenAI is the default engine whenever the server has an OpenAI key.
+  const [provider, setProvider] = useState<TtsProvider>(openaiAvailable ? "openai" : "gemini");
+  const [openaiChoice, setOpenaiChoice] = useOpenAIChoice();
   const [reconstruct, setReconstruct] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const startConvert = () => {
     setActionError(null);
     startTransition(async () => {
-      const r = await queueFileAction(file.id, provider, reconstruct);
+      const r = await queueFileAction(file.id, provider, reconstruct, openaiChoice);
       if (r.code === "GEMINI_KEY_MISSING") {
         setActionError(he.gemini.missingShort);
         openGeminiSetup();
@@ -450,6 +453,10 @@ function FileRow({
               ))}
             </div>
           </div>
+
+          {provider === "openai" && (
+            <OpenAIVoicePicker value={openaiChoice} onChange={setOpenaiChoice} disabled={isPending} />
+          )}
 
           <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
             {he.file.twoColumns}

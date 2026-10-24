@@ -14,6 +14,7 @@ import { synthesizeGemini, UnretryableQuotaError } from "../services/tts.service
 import { MissingGeminiKeyError, resolveGeminiContext } from "../services/gemini-keys.service.js";
 import { synthesizeAzure } from "../services/azure-tts.service.js";
 import { synthesizeOpenAI } from "../services/openai-tts.service.js";
+import { resolveOpenAIChoice } from "../services/openai-catalog.js";
 import { logUserError } from "../lib/error-log.js";
 import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
 
@@ -28,7 +29,7 @@ import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js"
  * the error is re-thrown so BullMQ can retry.
  */
 async function processConversion(job: Job<ConversionJobData>): Promise<void> {
-  const { fileId, userId, provider = "gemini", reconstructColumns = false } = job.data;
+  const { fileId, userId, provider = "gemini", reconstructColumns = false, openaiModel, openaiVoice } = job.data;
 
   const file = await prisma.file.findUnique({ where: { id: fileId } });
   if (!file) {
@@ -98,7 +99,12 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
 
     let duration: number;
     if (provider === "openai") {
-      duration = await synthesizeOpenAI(text, localMp3Path, (f) => setProgress(70 + f * 25));
+      duration = await synthesizeOpenAI(
+        text,
+        localMp3Path,
+        (f) => setProgress(70 + f * 25),
+        resolveOpenAIChoice(openaiModel, openaiVoice),
+      );
     } else if (provider === "azure") {
       duration = await synthesizeAzure(text, localMp3Path, (f) => setProgress(70 + f * 25));
     } else {

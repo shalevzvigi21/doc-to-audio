@@ -160,11 +160,17 @@ export async function queueFileAction(
   fileId: string,
   provider: TtsProvider = "gemini",
   reconstructColumns = false,
+  openai?: { model: string; voice: string },
 ): Promise<ActionResult> {
   try {
     await apiFetch("/jobs", {
       method: "POST",
-      body: JSON.stringify({ fileId, provider, reconstructColumns }),
+      body: JSON.stringify({
+        fileId,
+        provider,
+        reconstructColumns,
+        ...(provider === "openai" && openai ? { model: openai.model, voice: openai.voice } : {}),
+      }),
     });
   } catch (err) {
     if (err instanceof ApiError) return { error: err.message, code: err.code };

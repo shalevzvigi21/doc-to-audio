@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { redact } from "../lib/error-log.js";
 import { splitIntoChunks, encodePcmToMp3, DEFAULT_SAMPLE_RATE } from "./tts.service.js";
+import { resolveOpenAIChoice, type OpenAIChoice } from "./openai-catalog.js";
 
 /**
  * Text-to-speech via the OpenAI Audio API (`/v1/audio/speech`) — a third
@@ -23,14 +24,14 @@ const INSTRUCTIONS =
   "Read the Hebrew text aloud as a calm, clear audiobook narrator. Keep the same steady pace and tone throughout, " +
   "pronounce Hebrew naturally, and do not add or skip any words.";
 
-async function openaiChunkToPcm(text: string): Promise<Buffer> {
+async function openaiChunkToPcm(text: string, choice: OpenAIChoice): Promise<Buffer> {
   const body: Record<string, unknown> = {
-    model: config.openaiTtsModel,
-    voice: config.openaiTtsVoice,
+    model: choice.model,
+    voice: choice.voice,
     input: text,
     response_format: "pcm",
   };
-  if (config.openaiTtsModel.startsWith("gpt-4o")) body.instructions = INSTRUCTIONS;
+  if (choice.model.startsWith("gpt-4o")) body.instructions = INSTRUCTIONS;
 
   let lastError = "";
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -78,6 +79,7 @@ export async function synthesizeOpenAI(
   text: string,
   outputPath: string,
   onProgress?: (fraction: number) => void | Promise<void>,
+  choice: OpenAIChoice = resolveOpenAIChoice(),
 ): Promise<number> {
   if (!config.openaiConfigured) {
     throw new Error("OpenAI TTS is not configured (OPENAI_API_KEY)");
@@ -93,7 +95,7 @@ export async function synthesizeOpenAI(
     const batch = Array.from({ length: Math.min(PARALLEL_CHUNKS, chunks.length - start) }, (_, j) => start + j);
     await Promise.all(
       batch.map(async (i) => {
-        pcmBuffers[i] = await openaiChunkToPcm(chunks[i]);
+        pcmBuffers[i] = await openaiChunkToPcm(chunks[i], choice);
         completed++;
         await onProgress?.(completed / chunks.length);
       }),
