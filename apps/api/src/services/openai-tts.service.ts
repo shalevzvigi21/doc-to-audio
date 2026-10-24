@@ -24,7 +24,7 @@ const INSTRUCTIONS =
   "Read the Hebrew text aloud as a calm, clear audiobook narrator. Keep the same steady pace and tone throughout, " +
   "pronounce Hebrew naturally, and do not add or skip any words.";
 
-async function openaiChunkToPcm(text: string, choice: OpenAIChoice): Promise<Buffer> {
+async function openaiChunkToPcm(text: string, choice: OpenAIChoice, apiKey: string): Promise<Buffer> {
   const body: Record<string, unknown> = {
     model: choice.model,
     voice: choice.voice,
@@ -39,7 +39,7 @@ async function openaiChunkToPcm(text: string, choice: OpenAIChoice): Promise<Buf
     try {
       res = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
-        headers: { Authorization: `Bearer ${config.openaiApiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
     } catch (err) {
@@ -54,7 +54,7 @@ async function openaiChunkToPcm(text: string, choice: OpenAIChoice): Promise<Buf
     lastError = `HTTP ${res.status}: ${detail}`;
 
     // Hard failures (bad key, no credit, bad request) will not fix themselves.
-    if (res.status === 401) throw new Error("OpenAI rejected the API key (401). Check OPENAI_API_KEY.");
+    if (res.status === 401) throw new Error("OpenAI rejected the API key (401). Save a valid key in the app.");
     if (res.status === 402 || /insufficient_quota|billing/i.test(detail)) {
       throw new Error(`OpenAI account has no credit left (${detail})`);
     }
@@ -80,9 +80,10 @@ export async function synthesizeOpenAI(
   outputPath: string,
   onProgress?: (fraction: number) => void | Promise<void>,
   choice: OpenAIChoice = resolveOpenAIChoice(),
+  apiKey: string = config.openaiApiKey,
 ): Promise<number> {
-  if (!config.openaiConfigured) {
-    throw new Error("OpenAI TTS is not configured (OPENAI_API_KEY)");
+  if (!apiKey) {
+    throw new Error("No OpenAI API key available");
   }
 
   const chunks = splitIntoChunks(text, OPENAI_MAX_CHARS);
@@ -95,7 +96,7 @@ export async function synthesizeOpenAI(
     const batch = Array.from({ length: Math.min(PARALLEL_CHUNKS, chunks.length - start) }, (_, j) => start + j);
     await Promise.all(
       batch.map(async (i) => {
-        pcmBuffers[i] = await openaiChunkToPcm(chunks[i], choice);
+        pcmBuffers[i] = await openaiChunkToPcm(chunks[i], choice, apiKey);
         completed++;
         await onProgress?.(completed / chunks.length);
       }),

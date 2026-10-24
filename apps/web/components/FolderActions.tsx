@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ListVideo, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { convertFilesAction, deleteFolderAction } from "@/lib/actions/library";
-import { openGeminiSetup } from "@/components/GeminiSetup";
+import { openOpenAISetup } from "@/components/OpenAISetup";
 import { he } from "@/lib/strings";
 
 /** Actions for the folder that is currently selected: convert everything, or delete it. */
@@ -27,9 +27,9 @@ export function FolderActions({
   const convertAll = () =>
     startConvert(async () => {
       const { queued, failed, missingKey } = await convertFilesAction(convertibleIds);
-      if (missingKey) openGeminiSetup();
+      if (missingKey) openOpenAISetup();
       setMessage(
-        missingKey ? he.gemini.missingShort : failed > 0 ? he.library.convertAllError : he.library.convertAllDone(queued),
+        missingKey ? he.openaiKey.missingShort : failed > 0 ? he.library.convertAllError : he.library.convertAllDone(queued),
       );
       setTimeout(() => setMessage(null), 3000);
     });

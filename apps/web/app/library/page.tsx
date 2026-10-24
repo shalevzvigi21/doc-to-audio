@@ -5,7 +5,7 @@ import { getFileTree, apiFetch, ApiError } from "@/lib/api";
 import { LibraryToolbar } from "@/components/LibraryToolbar";
 import { FileList, type LibraryItem } from "@/components/FileList";
 import { FolderActions } from "@/components/FolderActions";
-import { GeminiQuota } from "@/components/GeminiQuota";
+import { OpenAIUsage } from "@/components/OpenAIUsage";
 import { LogoutButton } from "@/components/LogoutButton";
 import { TopBar } from "@/components/TopBar";
 import NewFolderForm from "@/components/NewFolderForm";
@@ -56,7 +56,6 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
 
   const quota = await apiFetch<TtsQuotaResponse>("/tts/quota").catch(() => null);
   const azureAvailable = quota?.azureAvailable ?? false;
-  const openaiAvailable = quota?.openaiAvailable ?? false;
   const allFolders = flattenFolders(tree.folders);
 
   const selected = searchParams.folder ? findFolder(tree.folders, searchParams.folder) : undefined;
@@ -80,7 +79,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
   return (
     <div className="mx-auto max-w-[880px] px-4 pb-36">
       <TopBar>
-        <GeminiQuota initial={quota} />
+        <OpenAIUsage />
         <LogoutButton />
       </TopBar>
 
@@ -116,7 +115,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
 
       {selected && <FolderActions folderId={selected.id} name={selected.name} convertibleIds={convertibleIds} />}
 
-      <FileList items={items} allFolders={allFolders} azureAvailable={azureAvailable} openaiAvailable={openaiAvailable} />
+      <FileList items={items} allFolders={allFolders} azureAvailable={azureAvailable} />
     </div>
   );
 }

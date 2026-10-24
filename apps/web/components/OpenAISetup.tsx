@@ -4,56 +4,60 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { CheckCircle2, ExternalLink, KeyRound, X } from "lucide-react";
-import type { TtsQuotaResponse } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
-import { removeGeminiKeyAction, saveGeminiKeyAction } from "@/lib/actions/gemini";
+import { removeOpenAIKeyAction, saveOpenAIKeyAction } from "@/lib/actions/openai";
 import type { ActionResult } from "@/lib/actions/types";
 import { he } from "@/lib/strings";
 
 /** Anything can open the guide by dispatching this event. */
-export const OPEN_GEMINI_SETUP = "open-gemini-setup";
-/** Fired after the key is saved or removed, so quota widgets refresh. */
-export const GEMINI_KEY_CHANGED = "gemini-key-changed";
-const SEEN_KEY = "gemini-setup-seen";
+export const OPEN_OPENAI_SETUP = "open-openai-setup";
+/** Fired after the key is saved or removed, so the spend pill refreshes. */
+export const OPENAI_KEY_CHANGED = "openai-key-changed";
+const SEEN_KEY = "openai-setup-seen";
 
-export function openGeminiSetup(): void {
-  window.dispatchEvent(new Event(OPEN_GEMINI_SETUP));
+export interface OpenAIKeyStatus {
+  source: "user" | "server" | "none";
+  last4: string | null;
+}
+
+export function openOpenAISetup(): void {
+  window.dispatchEvent(new Event(OPEN_OPENAI_SETUP));
 }
 
 function SaveButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending} className="sm:shrink-0">
-      {pending ? he.gemini.saving : he.gemini.save}
+      {pending ? he.openaiKey.saving : he.openaiKey.save}
     </Button>
   );
 }
 
 /**
- * Hebrew step-by-step guide to getting a Gemini API key, with the field to
+ * Hebrew step-by-step guide to getting an OpenAI API key, with the field to
  * paste it into. Opens by itself the first time a signed-in user reaches the
- * library without a key, and any time something dispatches OPEN_GEMINI_SETUP.
+ * library without any key, and any time something dispatches OPEN_OPENAI_SETUP.
  * Mounted once, in the root layout.
  */
-export function GeminiSetup() {
+export function OpenAISetup() {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [first, setFirst] = useState(false);
-  const [status, setStatus] = useState<TtsQuotaResponse["geminiKey"] | null>(null);
+  const [status, setStatus] = useState<OpenAIKeyStatus | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, startRemove] = useTransition();
-  const [state, formAction] = useFormState<ActionResult, FormData>(saveGeminiKeyAction, {});
+  const [state, formAction] = useFormState<ActionResult, FormData>(saveOpenAIKeyAction, {});
   const checkedFor = useRef<string | null>(null);
 
-  const fetchStatus = async (): Promise<TtsQuotaResponse["geminiKey"] | null> => {
+  const fetchStatus = async (): Promise<OpenAIKeyStatus | null> => {
     try {
-      const res = await fetch("/api/tts/quota", { cache: "no-store" });
+      const res = await fetch("/api/openai/usage", { cache: "no-store" });
       if (!res.ok) return null;
-      const next = (await res.json()) as TtsQuotaResponse;
-      setStatus(next.geminiKey ?? null);
-      return next.geminiKey ?? null;
+      const next = (await res.json()) as { openaiKey?: OpenAIKeyStatus };
+      setStatus(next.openaiKey ?? null);
+      return next.openaiKey ?? null;
     } catch {
       return null;
     }
@@ -77,8 +81,8 @@ export function GeminiSetup() {
       setOpen(true);
       void fetchStatus();
     };
-    window.addEventListener(OPEN_GEMINI_SETUP, onOpen);
-    return () => window.removeEventListener(OPEN_GEMINI_SETUP, onOpen);
+    window.addEventListener(OPEN_OPENAI_SETUP, onOpen);
+    return () => window.removeEventListener(OPEN_OPENAI_SETUP, onOpen);
   }, []);
 
   // First launch: a signed-in user with no key lands on the library.
@@ -107,7 +111,7 @@ export function GeminiSetup() {
   // Saved successfully.
   useEffect(() => {
     if (!state.success) return;
-    window.dispatchEvent(new Event(GEMINI_KEY_CHANGED));
+    window.dispatchEvent(new Event(OPENAI_KEY_CHANGED));
     router.refresh();
     void fetchStatus();
     setReplacing(false);
@@ -139,8 +143,8 @@ export function GeminiSetup() {
       return;
     }
     startRemove(async () => {
-      await removeGeminiKeyAction();
-      window.dispatchEvent(new Event(GEMINI_KEY_CHANGED));
+      await removeOpenAIKeyAction();
+      window.dispatchEvent(new Event(OPENAI_KEY_CHANGED));
       router.refresh();
       await fetchStatus();
       setConfirmRemove(false);
@@ -155,7 +159,7 @@ export function GeminiSetup() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="gemini-setup-title"
+        aria-labelledby="openai-setup-title"
         className="max-h-full w-full max-w-[560px] animate-sheet-up overflow-y-auto rounded-t-[32px] bg-background px-6 pb-[calc(24px+env(safe-area-inset-bottom,0px))] pt-5 sm:rounded-[32px]"
       >
         <div className="flex items-start justify-between gap-4">
@@ -165,46 +169,46 @@ export function GeminiSetup() {
           <button
             type="button"
             onClick={close}
-            aria-label={he.gemini.close}
+            aria-label={he.openaiKey.close}
             className="-me-2 grid h-10 w-10 place-items-center rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <h2 id="gemini-setup-title" className="mt-3 text-balance text-2xl font-extrabold tracking-tight">
-          {first ? he.gemini.welcomeTitle : he.gemini.title}
+        <h2 id="openai-setup-title" className="mt-3 text-balance text-2xl font-extrabold tracking-tight">
+          {first ? he.openaiKey.welcomeTitle : he.openaiKey.title}
         </h2>
 
-        {hasOwnKey && !replacing ? (
+        {!showForm ? (
           <div className="mt-4 space-y-4">
             <div className="flex items-center gap-3 rounded-2xl border bg-card p-4">
               <CheckCircle2 className="h-6 w-6 shrink-0 text-ok" />
               <div className="min-w-0">
-                <div className="font-semibold">{justSaved ? he.gemini.done : he.gemini.savedTitle}</div>
+                <div className="font-semibold">{justSaved ? he.openaiKey.done : he.openaiKey.savedTitle}</div>
                 <div className="num text-sm text-muted-foreground">••••{status?.last4}</div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setReplacing(true)}>
-                {he.gemini.replace}
+                {he.openaiKey.replace}
               </Button>
               <Button variant="ghost" disabled={removing} onClick={remove} className="text-destructive hover:text-destructive">
-                {confirmRemove ? he.gemini.removeConfirm : he.gemini.remove}
+                {confirmRemove ? he.openaiKey.removeConfirm : he.openaiKey.remove}
               </Button>
               <Button onClick={close} className="ms-auto">
-                {he.gemini.close}
+                {he.openaiKey.close}
               </Button>
             </div>
           </div>
         ) : (
           <>
-            <p className="mt-2 text-muted-foreground">{he.gemini.intro}</p>
-            {status?.source === "server" && <p className="mt-2 text-sm text-warn">{he.gemini.serverKeyNote}</p>}
+            <p className="mt-2 text-muted-foreground">{he.openaiKey.intro}</p>
+            {status?.source === "server" && <p className="mt-2 text-sm text-warn">{he.openaiKey.serverKeyNote}</p>}
 
-            <h3 className="mt-6 text-sm font-semibold">{he.gemini.stepsHeading}</h3>
+            <h3 className="mt-6 text-sm font-semibold">{he.openaiKey.stepsHeading}</h3>
             <ol className="mt-3 space-y-3">
-              {he.gemini.steps.map((step, i) => (
+              {he.openaiKey.steps.map((step, i) => (
                 <li key={step.title} className="flex gap-3">
                   <span className="num grid h-7 w-7 shrink-0 place-items-center rounded-full bg-foreground text-[13px] text-background">
                     {i + 1}
@@ -213,15 +217,20 @@ export function GeminiSetup() {
                     <div className="font-medium leading-snug">{step.title}</div>
                     <div className="text-sm text-muted-foreground">{step.body}</div>
                     {i === 0 && (
-                      <a
-                        href="https://aistudio.google.com/apikey"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 inline-flex h-9 items-center gap-2 rounded-lg bg-secondary px-3.5 text-sm font-semibold hover:brightness-95 dark:hover:brightness-125"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        {he.gemini.openStudio}
-                      </a>
+                      <>
+                        <a
+                          href="https://platform.openai.com/api-keys"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-flex h-9 items-center gap-2 rounded-lg bg-secondary px-3.5 text-sm font-semibold hover:brightness-95 dark:hover:brightness-125"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          {he.openaiKey.openPlatform}
+                        </a>
+                        <div dir="ltr" className="num mt-1.5 select-all text-xs text-muted-foreground">
+                          platform.openai.com/api-keys
+                        </div>
+                      </>
                     )}
                   </div>
                 </li>
@@ -229,12 +238,12 @@ export function GeminiSetup() {
             </ol>
 
             <form action={formAction} className="mt-5">
-              <label htmlFor="gemini-key" className="text-[13px] text-muted-foreground">
-                {he.gemini.keyLabel}
+              <label htmlFor="openai-key" className="text-[13px] text-muted-foreground">
+                {he.openaiKey.keyLabel}
               </label>
               <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
                 <input
-                  id="gemini-key"
+                  id="openai-key"
                   name="apiKey"
                   type="password"
                   dir="ltr"
@@ -242,7 +251,7 @@ export function GeminiSetup() {
                   spellCheck={false}
                   autoFocus
                   required
-                  placeholder={he.gemini.keyPlaceholder}
+                  placeholder={he.openaiKey.keyPlaceholder}
                   className="num h-12 w-full min-w-0 rounded-xl border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <SaveButton />
@@ -254,10 +263,10 @@ export function GeminiSetup() {
               )}
             </form>
 
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{he.gemini.privacy}</p>
+            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{he.openaiKey.privacy}</p>
             <div className="mt-4 flex justify-end">
               <Button variant="ghost" size="sm" onClick={replacing ? () => setReplacing(false) : close}>
-                {replacing ? he.gemini.close : he.gemini.later}
+                {replacing ? he.openaiKey.close : he.openaiKey.later}
               </Button>
             </div>
           </>

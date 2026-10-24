@@ -158,7 +158,7 @@ export async function createJobAction(
  */
 export async function queueFileAction(
   fileId: string,
-  provider: TtsProvider = "gemini",
+  provider: TtsProvider = "openai",
   reconstructColumns = false,
   openai?: { model: string; voice: string },
 ): Promise<ActionResult> {
@@ -186,7 +186,7 @@ export async function queueFileAction(
  */
 export async function convertFilesAction(
   fileIds: string[],
-  provider: TtsProvider = "gemini",
+  provider: TtsProvider = "openai",
   reconstructColumns = false,
 ): Promise<{ queued: number; failed: number; missingKey: boolean }> {
   let queued = 0;
@@ -196,8 +196,8 @@ export async function convertFilesAction(
     const result = await queueFileAction(fileId, provider, reconstructColumns);
     if (result.success) queued++;
     else failed++;
-    // No Gemini key saved: every remaining file would fail the same way.
-    if (result.code === "GEMINI_KEY_MISSING") {
+    // No key saved: every remaining file would fail the same way.
+    if (result.code === "OPENAI_KEY_MISSING") {
       missingKey = true;
       failed += fileIds.length - queued - failed;
       break;

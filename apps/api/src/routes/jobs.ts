@@ -11,6 +11,7 @@ import { config } from "../config.js";
 import { requireUser, notFound, badRequest } from "../lib/http.js";
 import { resolveGeminiContext } from "../services/gemini-keys.service.js";
 import { resolveOpenAIChoice, OpenAIChoiceError } from "../services/openai-catalog.js";
+import { resolveOpenAIKey } from "../services/openai-keys.service.js";
 
 const createJobSchema = z.object({
   fileId: z.string().cuid("A valid fileId is required"),
@@ -46,8 +47,13 @@ const jobsRoutes: FastifyPluginAsync = async (fastify) => {
         throw err;
       }
     }
-    if (provider === "openai" && !config.openaiConfigured) {
-      return badRequest(reply, "OpenAI TTS is not configured on the server");
+    if (provider === "openai" && !(await resolveOpenAIKey(user.id))) {
+      return reply.code(400).send({
+        statusCode: 400,
+        error: "Bad Request",
+        code: "OPENAI_KEY_MISSING",
+        message: "Add your OpenAI API key first",
+      });
     }
     if (provider === "azure" && !config.azureConfigured) {
       return badRequest(reply, "Azure TTS is not configured on the server");

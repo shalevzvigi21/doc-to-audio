@@ -15,9 +15,31 @@ model User {
   geminiKeyEnc   String?
   /// Last 4 characters of the key, shown in the UI so users can tell which key is saved.
   geminiKeyLast4 String?
+  /// The user's own OpenAI API key, AES-256-GCM encrypted. Null until they add one.
+  openaiKeyEnc   String?
+  openaiKeyLast4 String?
   createdAt    DateTime @default(now())
   folders      Folder[]
   files        File[]
+  usage        UsageEntry[]
+}
+
+/// One billable OpenAI speech request (a finished conversion or a voice sample),
+/// with its estimated cost. Kept after a file is deleted, so monthly totals stay true.
+model UsageEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  model     String
+  voice     String
+  chars     Int
+  seconds   Float
+  costUsd   Float
+  fileName  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Folder {

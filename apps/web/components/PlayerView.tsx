@@ -7,7 +7,7 @@ import type { JobStatusResponse } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
 import { InlinePlayer } from "@/components/player/InlinePlayer";
 import { queueFileAction } from "@/lib/actions/library";
-import { openGeminiSetup } from "@/components/GeminiSetup";
+import { openOpenAISetup } from "@/components/OpenAISetup";
 import { he } from "@/lib/strings";
 
 interface PlayerViewProps {
@@ -55,8 +55,8 @@ export function PlayerView({ initial }: PlayerViewProps) {
   const handleRestart = async () => {
     setRestarting(true);
     const result = await queueFileAction(job.fileId);
-    if (result.code === "GEMINI_KEY_MISSING") {
-      openGeminiSetup();
+    if (result.code === "OPENAI_KEY_MISSING") {
+      openOpenAISetup();
       setRestarting(false);
       return;
     }

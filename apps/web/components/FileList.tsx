@@ -20,7 +20,8 @@ import type { FileRecord, TtsProvider } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
 import { deleteFileAction, moveFileAction, queueFileAction, renameFileAction } from "@/lib/actions/library";
 import { usePlayer } from "@/components/player/context";
-import { openGeminiSetup } from "@/components/GeminiSetup";
+import { openOpenAISetup } from "@/components/OpenAISetup";
+import { ImportantToKnow } from "@/components/ImportantToKnow";
 import { OpenAIVoicePicker, useOpenAIChoice } from "@/components/OpenAIVoicePicker";
 import { cn, formatClock, relativeDate } from "@/lib/utils";
 import { he } from "@/lib/strings";
@@ -58,12 +59,10 @@ function FileRow({
   item,
   allFolders,
   azureAvailable,
-  openaiAvailable,
 }: {
   item: LibraryItem;
   allFolders: FlatFolder[];
   azureAvailable: boolean;
-  openaiAvailable: boolean;
 }) {
   const { file, folderName } = item;
   const router = useRouter();
@@ -107,8 +106,8 @@ function FileRow({
 
   // Convert drawer
   const [drawer, setDrawer] = useState(false);
-  // OpenAI is the default engine whenever the server has an OpenAI key.
-  const [provider, setProvider] = useState<TtsProvider>(openaiAvailable ? "openai" : "gemini");
+  // OpenAI is the default engine.
+  const [provider, setProvider] = useState<TtsProvider>("openai");
   const [openaiChoice, setOpenaiChoice] = useOpenAIChoice();
   const [reconstruct, setReconstruct] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -117,9 +116,9 @@ function FileRow({
     setActionError(null);
     startTransition(async () => {
       const r = await queueFileAction(file.id, provider, reconstruct, openaiChoice);
-      if (r.code === "GEMINI_KEY_MISSING") {
-        setActionError(he.gemini.missingShort);
-        openGeminiSetup();
+      if (r.code === "OPENAI_KEY_MISSING") {
+        setActionError(he.openaiKey.missingShort);
+        openOpenAISetup();
       } else if (r.error) setActionError(r.error);
       else {
         setDrawer(false);
@@ -428,16 +427,8 @@ function FileRow({
                   key={p}
                   type="button"
                   aria-pressed={provider === p}
-                  disabled={
-                    isPending || (p === "azure" && !azureAvailable) || (p === "openai" && !openaiAvailable)
-                  }
-                  title={
-                    p === "azure" && !azureAvailable
-                      ? he.tts.azureUnavailable
-                      : p === "openai" && !openaiAvailable
-                        ? he.tts.openaiUnavailable
-                        : undefined
-                  }
+                  disabled={isPending || (p === "azure" && !azureAvailable)}
+                  title={p === "azure" && !azureAvailable ? he.tts.azureUnavailable : undefined}
                   onClick={() => setProvider(p)}
                   className={cn(
                     "rounded-[9px] px-4 py-1.5 text-sm text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40",
@@ -457,6 +448,8 @@ function FileRow({
           {provider === "openai" && (
             <OpenAIVoicePicker value={openaiChoice} onChange={setOpenaiChoice} disabled={isPending} />
           )}
+
+          <ImportantToKnow />
 
           <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
             {he.file.twoColumns}
@@ -547,12 +540,10 @@ export function FileList({
   items,
   allFolders,
   azureAvailable = false,
-  openaiAvailable = false,
 }: {
   items: LibraryItem[];
   allFolders: FlatFolder[];
   azureAvailable?: boolean;
-  openaiAvailable?: boolean;
 }) {
   if (items.length === 0) {
     return (
@@ -567,7 +558,6 @@ export function FileList({
       {items.map((item) => (
         <FileRow key={item.file.id} item={item} allFolders={allFolders}
           azureAvailable={azureAvailable}
-          openaiAvailable={openaiAvailable}
         />
       ))}
     </div>

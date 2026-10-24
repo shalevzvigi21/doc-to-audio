@@ -45,7 +45,7 @@ const envSchema = z.object({
   // OpenAI text-to-speech (optional engine). Only the key is required.
   OPENAI_API_KEY: z.string().optional().default(""),
   OPENAI_TTS_MODEL: z.string().optional().default("gpt-4o-mini-tts"),
-  OPENAI_TTS_VOICE: z.string().optional().default("onyx"),
+  OPENAI_TTS_VOICE: z.string().optional().default("marin"),
   HOST: z.string().default("0.0.0.0"),
   PORT: z.coerce.number().default(4000),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),

@@ -6,7 +6,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    /** Machine-readable code from the API, e.g. "GEMINI_KEY_MISSING". */
+    /** Machine-readable code from the API, e.g. "OPENAI_KEY_MISSING". */
     public code?: string,
   ) {
     super(message);

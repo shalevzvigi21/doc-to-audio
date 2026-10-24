@@ -15,6 +15,8 @@ import { MissingGeminiKeyError, resolveGeminiContext } from "../services/gemini-
 import { synthesizeAzure } from "../services/azure-tts.service.js";
 import { synthesizeOpenAI } from "../services/openai-tts.service.js";
 import { resolveOpenAIChoice } from "../services/openai-catalog.js";
+import { MissingOpenAIKeyError, resolveOpenAIKey } from "../services/openai-keys.service.js";
+import { recordUsage } from "../services/openai-usage.service.js";
 import { logUserError } from "../lib/error-log.js";
 import { downloadToTemp, uploadLocalFile } from "../services/storage.service.js";
 
@@ -99,12 +101,19 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
 
     let duration: number;
     if (provider === "openai") {
-      duration = await synthesizeOpenAI(
-        text,
-        localMp3Path,
-        (f) => setProgress(70 + f * 25),
-        resolveOpenAIChoice(openaiModel, openaiVoice),
-      );
+      const openaiKey = await resolveOpenAIKey(userId);
+      if (!openaiKey) throw new MissingOpenAIKeyError();
+      const choice = resolveOpenAIChoice(openaiModel, openaiVoice);
+      duration = await synthesizeOpenAI(text, localMp3Path, (f) => setProgress(70 + f * 25), choice, openaiKey.key);
+      await recordUsage({
+        userId,
+        kind: "conversion",
+        model: choice.model,
+        voice: choice.voice,
+        chars: text.length,
+        seconds: duration,
+        fileName: file.name,
+      });
     } else if (provider === "azure") {
       duration = await synthesizeAzure(text, localMp3Path, (f) => setProgress(70 + f * 25));
     } else {
@@ -139,6 +148,16 @@ async function processConversion(job: Job<ConversionJobData>): Promise<void> {
 
     if (err instanceof UnretryableQuotaError) {
       console.error(`[conversion] Gemini quota unrecoverable — not retrying. ${err.message}`);
+      return;
+    }
+    if (provider === "openai") {
+      // OpenAI bills per request. Retrying the whole job would pay for the same audio again,
+      // so a failure stops here and the user restarts it by hand.
+      console.error(`[conversion] OpenAI conversion failed — not retrying (avoids paying twice).`);
+      return;
+    }
+    if (err instanceof MissingOpenAIKeyError) {
+      console.error(`[conversion] no OpenAI key for user ${userId} — not retrying.`);
       return;
     }
     if (err instanceof MissingGeminiKeyError) {
