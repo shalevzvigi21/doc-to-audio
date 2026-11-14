@@ -1,4 +1,9 @@
 import path from "node:path";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, rm as removeTree } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { pipeline } from "node:stream/promises";
+import type { Readable } from "node:stream";
 import { z } from "zod";
 import type { FastifyPluginAsync } from "fastify";
 import type { FileTree, FolderNode, FileRecord } from "@doc-to-audio/types";
@@ -8,6 +13,7 @@ import {
   saveUploadedFile,
   getStorageStream,
   deleteFromStorage,
+  uploadLocalFile,
 } from "../services/storage.service.js";
 
 type DbFile = {
@@ -188,6 +194,52 @@ const filesRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.code(201).send({ file: serializeFile(file as DbFile) });
   });
+
+  // Raw MP3 bodies (used by import-audio) are streamed through untouched.
+  fastify.addContentTypeParser("audio/mpeg", (_req, payload, done) => done(null, payload));
+
+  /**
+   * PUT /files/:id/import-audio?duration=SECONDS[&lastPosition=SECONDS]
+   * Attach an already-finished MP3 to one of the caller's own files and mark it
+   * DONE. Used to move audio from another install without converting again.
+   */
+  fastify.put<{ Params: { id: string }; Querystring: { duration?: string; lastPosition?: string } }>(
+    "/files/:id/import-audio",
+    { bodyLimit: 300 * 1024 * 1024 },
+    async (request, reply) => {
+      const user = requireUser(request, reply);
+      if (!user) return;
+
+      const file = await prisma.file.findFirst({ where: { id: request.params.id, userId: user.id } });
+      if (!file) return notFound(reply, "File not found");
+      if (file.status === "PROCESSING") {
+        return reply.code(409).send({ statusCode: 409, error: "Conflict", message: "File is being converted" });
+      }
+
+      const duration = Number(request.query.duration);
+      if (!Number.isFinite(duration) || duration <= 0) return badRequest(reply, "duration is required");
+      const lastPosition = Math.max(0, Number(request.query.lastPosition) || 0);
+
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "doc2audio-imp-"));
+      try {
+        const tmpPath = path.join(tmpDir, "audio.mp3");
+        await pipeline(request.body as Readable, createWriteStream(tmpPath));
+        const audioPath = await uploadLocalFile(tmpPath, `audio/${user.id}/${file.id}.mp3`, "audio/mpeg");
+        await prisma.audioJob.upsert({
+          where: { fileId: file.id },
+          create: { fileId: file.id, audioPath, duration, progress: 100, lastPosition },
+          update: { audioPath, duration, progress: 100, lastPosition },
+        });
+        await prisma.file.update({ where: { id: file.id }, data: { status: "DONE" } });
+      } catch (err) {
+        request.log.error(err, "audio import failed");
+        return reply.code(500).send({ statusCode: 500, error: "Internal Server Error", message: "Import failed" });
+      } finally {
+        await removeTree(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+      return reply.send({ ok: true });
+    },
+  );
 
   const patchFileSchema = z.object({
     name: z
