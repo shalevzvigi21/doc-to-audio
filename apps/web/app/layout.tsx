@@ -3,6 +3,7 @@ import { JetBrains_Mono, Rubik } from "next/font/google";
 import "./globals.css";
 import { he } from "@/lib/strings";
 import { PlayerProvider } from "@/components/player/PlayerProvider";
+import { GeminiSetup } from "@/components/GeminiSetup";
 import { OpenAISetup } from "@/components/OpenAISetup";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <SiteFooter />
         </PlayerProvider>
+        <GeminiSetup />
         <OpenAISetup />
       </body>
     </html>

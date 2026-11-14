@@ -167,6 +167,60 @@ export const he = {
     rights: "All rights reserved.",
   },
 
+  gemini: {
+    pillMissing: "חסר מפתח Gemini",
+    pillAdd: "הוספה",
+    pillAddOwn: "מפתח אישי",
+    pillKey: (last4: string) => `מפתח ••••${last4}`,
+    pillServerKey: "מפתח השרת",
+    openAria: "הגדרות מפתח Gemini",
+    welcomeTitle: "ברוכים הבאים למסמך לאודיו",
+    title: "חיבור Gemini",
+    intro:
+      "כדי להפוך מסמכים לאודיו, האפליקציה משתמשת ב-Gemini של גוגל. צריך מפתח API אישי שלכם. לוקח בערך דקה, והמכסה נקבעת בחשבון שלכם בגוגל.",
+    stepsHeading: "איך מקבלים מפתח",
+    steps: [
+      {
+        title: "נכנסים ל-Google AI Studio",
+        body: "פותחים את הקישור ומתחברים עם חשבון גוגל.",
+      },
+      {
+        title: "לוחצים על Create API key",
+        body: "בוחרים פרויקט קיים או יוצרים פרויקט חדש. אין צורך בכרטיס אשראי.",
+      },
+      {
+        title: "מעתיקים את המפתח",
+        body: "זו שורה ארוכה של אותיות ומספרים שמתחילה ב-AIza או ב-AQ. (מפתחות חדשים של גוגל).",
+      },
+      {
+        title: "מדביקים כאן ושומרים",
+        body: "נבדוק מול גוגל שהמפתח עובד לפני שנשמור אותו.",
+      },
+    ],
+    openStudio: "פתיחת Google AI Studio",
+    keyLabel: "מפתח Gemini API",
+    keyPlaceholder: "AIza… / AQ.…",
+    save: "שמירה ובדיקה",
+    saving: "בודק…",
+    later: "אחר כך",
+    close: "סגירה",
+    done: "המפתח נשמר. אפשר להתחיל להמיר.",
+    savedTitle: "מפתח שמור",
+    replace: "החלפת מפתח",
+    remove: "הסרת המפתח",
+    removeConfirm: "בטוחים? לחצו שוב להסרה",
+    privacy:
+      "המפתח נשמר מוצפן בשרת ומשמש רק להמרות שלכם. מכסת ההקראה נקבעת בחשבון Google AI Studio שלכם (במסלול החינמי יש כ-100 בקשות ליום, ובמסלול בתשלום המכסה גבוהה בהרבה).",
+    serverKeyNote: "כרגע ההמרות משתמשות במפתח משותף של השרת. אפשר להוסיף מפתח אישי כדי לא להיות תלויים במכסה המשותפת.",
+    missingShort: "כדי להמיר צריך קודם להוסיף מפתח Gemini.",
+    addKeyLink: "הוספת מפתח Gemini",
+    errEmpty: "הדביקו את המפתח בשדה.",
+    errFormat: "המפתח נראה לא תקין. העתיקו אותו שוב מ-Google AI Studio.",
+    errInvalid: "גוגל לא קיבלה את המפתח. בדקו שהעתקתם אותו במלואו.",
+    errUnreachable: "לא הצלחנו להגיע לגוגל כדי לבדוק את המפתח. נסו שוב בעוד רגע.",
+    errGeneric: "משהו השתבש. נסו שוב.",
+  },
+
   openaiKey: {
     pillMissing: "חסר מפתח OpenAI",
     pillAdd: "הוספה",

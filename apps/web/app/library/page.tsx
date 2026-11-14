@@ -5,6 +5,7 @@ import { getFileTree, apiFetch, ApiError } from "@/lib/api";
 import { LibraryToolbar } from "@/components/LibraryToolbar";
 import { FileList, type LibraryItem } from "@/components/FileList";
 import { FolderActions } from "@/components/FolderActions";
+import { GeminiQuota } from "@/components/GeminiQuota";
 import { OpenAIUsage } from "@/components/OpenAIUsage";
 import { LogoutButton } from "@/components/LogoutButton";
 import { TopBar } from "@/components/TopBar";
@@ -79,6 +80,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
   return (
     <div className="mx-auto max-w-[880px] px-4 pb-36">
       <TopBar>
+        <GeminiQuota initial={quota} />
         <OpenAIUsage />
         <LogoutButton />
       </TopBar>
