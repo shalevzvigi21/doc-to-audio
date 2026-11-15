@@ -4,7 +4,7 @@ import { he } from "@/lib/strings";
 /** Login/register layout: dark brand panel next to the form. */
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto grid min-h-screen max-w-[980px] items-center gap-6 px-4 py-6 md:grid-cols-[1.1fr_1fr]">
+    <main className="mx-auto grid min-h-dvh max-w-[980px] items-center gap-6 px-4 py-6 md:grid-cols-[1.1fr_1fr]">
       <section className="relative flex min-h-[260px] flex-col justify-between gap-8 overflow-hidden rounded-[32px] bg-[hsl(229_22%_10%)] p-7 text-[hsl(228_22%_95%)] md:min-h-[460px] md:p-10 dark:bg-card dark:text-foreground">
         <div className="flex items-center gap-2.5 text-[19px] font-extrabold tracking-tight">
           <BrandMark onDark />

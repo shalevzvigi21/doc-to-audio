@@ -17,6 +17,13 @@ export interface Track {
   doc?: { fileId: string; mimeType: string; name: string };
 }
 
+/** Sleep timer: pause after N minutes, or when the current document ends. */
+export interface SleepTimer {
+  kind: "off" | "minutes" | "end";
+  /** Epoch ms when it fires (only for kind "minutes"). */
+  endsAt: number | null;
+}
+
 export interface PlayerContextValue {
   track: Track | null;
   playing: boolean;
@@ -24,6 +31,9 @@ export interface PlayerContextValue {
   total: number;
   speed: number;
   sheetOpen: boolean;
+  sleep: SleepTimer;
+  /** Minutes, "end" (stop when the document ends) or null to turn the timer off. */
+  setSleep: (value: number | "end" | null) => void;
   /**
    * Load a track. Without `autoplay` this only prepares it. With `autoplay`
    * it starts playing, or toggles play/pause if the track is already loaded.

@@ -68,6 +68,29 @@
   body {
     @apply bg-background text-foreground;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* No 300 ms tap delay / double-tap zoom on controls. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [role="button"],
+  [role="slider"] {
+    touch-action: manipulation;
+  }
+  /* iOS zooms the page when a focused field is under 16px. */
+  @media (max-width: 639px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
 }
 
 @layer components {

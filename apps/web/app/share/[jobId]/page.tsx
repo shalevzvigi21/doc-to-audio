@@ -6,7 +6,7 @@ import { he } from "@/lib/strings";
 
 export default function SharePage({ params }: { params: { jobId: string } }) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-[620px] flex-col px-4 pb-10">
+    <div className="mx-auto flex min-h-dvh max-w-[620px] flex-col px-4 pb-10">
       <header className="flex items-center justify-between py-3.5">
         <Brand href="/" />
         <ThemeToggle />

@@ -18,9 +18,10 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-11 px-5",
-        sm: "h-9 rounded-lg px-4",
+        // 44px minimum touch target on phones, compact on larger screens.
+        sm: "h-9 rounded-lg px-4 max-sm:h-11",
         lg: "h-12 px-7",
-        icon: "h-10 w-10",
+        icon: "h-10 w-10 max-sm:h-11 max-sm:w-11",
       },
     },
     defaultVariants: {
