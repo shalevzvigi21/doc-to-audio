@@ -9,6 +9,7 @@ import { GeminiQuota } from "@/components/GeminiQuota";
 import { OpenAIUsage } from "@/components/OpenAIUsage";
 import { LogoutButton } from "@/components/LogoutButton";
 import { TopBar } from "@/components/TopBar";
+import { IosInstallBanner } from "@/components/InstallHint";
 import NewFolderForm from "@/components/NewFolderForm";
 import { cn } from "@/lib/utils";
 import { he } from "@/lib/strings";
@@ -79,11 +80,13 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
 
   return (
     <div className="mx-auto max-w-[880px] px-4 pb-36">
-      <TopBar>
+      <TopBar quota={quota}>
         <GeminiQuota initial={quota} />
         <OpenAIUsage />
         <LogoutButton />
       </TopBar>
+
+      <IosInstallBanner />
 
       <LibraryToolbar folderId={selected?.id} />
 

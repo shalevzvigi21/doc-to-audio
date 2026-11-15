@@ -102,7 +102,8 @@ self.addEventListener("fetch", (event) => {
         const hit = await cache.match(request);
         if (hit) return hit;
         const res = await fetch(request);
-        if (res.ok) cache.put(request, res.clone());
+        // waitUntil keeps the worker alive until the copy is stored.
+        if (res.ok) event.waitUntil(cache.put(request, res.clone()));
         return res;
       }),
     );

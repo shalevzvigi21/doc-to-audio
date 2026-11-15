@@ -137,6 +137,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     else el.pause();
   }, [play]);
 
+  const stop = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    persist();
+    el.pause();
+    el.removeAttribute("src");
+    el.load();
+    trackRef.current = null;
+    setTrack(null);
+    setPlaying(false);
+    setCurrent(0);
+    setTotal(0);
+    setSheetOpen(false);
+    setSleep(null);
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
+    }
+  }, [persist, setSleep]);
+
   const seek = useCallback((seconds: number) => {
     const el = audioRef.current;
     if (!el) return;
@@ -172,8 +192,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const onUnload = () => persist();
+    // beforeunload rarely fires on phones; the page is "hidden" when the user switches apps or locks the screen.
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") persist();
+    };
     window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
+    window.addEventListener("pagehide", onUnload);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      window.removeEventListener("pagehide", onUnload);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [persist]);
 
   // Lock-screen / notification metadata for the current track.
@@ -231,6 +261,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setSleep,
       load,
       toggle,
+      stop,
       seek,
       skip,
       cycleSpeed,
@@ -239,7 +270,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       registerInline,
       inlineActive: inlineCount > 0,
     }),
-    [track, playing, current, total, speed, sheetOpen, sleep, setSleep, inlineCount, load, toggle, seek, skip, cycleSpeed, registerInline],
+    [track, playing, current, total, speed, sheetOpen, sleep, setSleep, inlineCount, load, toggle, stop, seek, skip, cycleSpeed, registerInline],
   );
 
   return (
@@ -280,6 +311,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           setCurrent(t);
           if (Date.now() - lastSaved.current.at > SAVE_EVERY_MS) persist();
           if (Date.now() - lastPositionState.current > POSITION_STATE_EVERY_MS) updatePositionState();
+          // Phones throttle setTimeout in the background, but media events keep firing: re-check the sleep timer here.
+          const s = sleepRef.current;
+          if (s.kind === "minutes" && s.endsAt !== null && Date.now() >= s.endsAt) {
+            audioRef.current?.pause();
+            setSleep(null);
+          }
         }}
         onEnded={() => {
           setPlaying(false);

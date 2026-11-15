@@ -40,6 +40,8 @@ export interface PlayerContextValue {
    */
   load: (track: Track, opts?: { autoplay?: boolean }) => void;
   toggle: () => void;
+  /** Stop playback and forget the track (used on logout so nothing keeps playing or shows on the lock screen). */
+  stop: () => void;
   seek: (seconds: number) => void;
   skip: (delta: number) => void;
   cycleSpeed: () => void;

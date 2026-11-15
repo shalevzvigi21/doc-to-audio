@@ -15,6 +15,12 @@ export interface SheetProps {
   contentClassName?: string;
 }
 
+// Open sheets, topmost last. Only the topmost one reacts to Escape/Tab, and the page scroll
+// lock is reference-counted so overlapping sheets cannot leave the body locked.
+const openSheets: symbol[] = [];
+let scrollLocks = 0;
+let savedOverflow = "";
+
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -35,13 +41,21 @@ export function Sheet({
   const [isDragging, setIsDragging] = React.useState(false);
   const dragStartRef = React.useRef<{ y: number; time: number } | null>(null);
 
-  // Lock body scroll while open
+  const sheetId = React.useRef<symbol>(Symbol("sheet"));
+
+  // Register in the sheet stack and lock body scroll while open
   React.useEffect(() => {
     if (!open) return;
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const id = sheetId.current;
+    openSheets.push(id);
+    if (scrollLocks++ === 0) {
+      savedOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
     return () => {
-      document.body.style.overflow = originalOverflow;
+      const i = openSheets.indexOf(id);
+      if (i >= 0) openSheets.splice(i, 1);
+      if (--scrollLocks === 0) document.body.style.overflow = savedOverflow;
     };
   }, [open]);
 
@@ -77,6 +91,7 @@ export function Sheet({
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (openSheets[openSheets.length - 1] !== sheetId.current) return; // not the topmost sheet
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -186,6 +201,7 @@ export function Sheet({
     >
       <div
         ref={dialogRef}
+        data-sheet=""
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}

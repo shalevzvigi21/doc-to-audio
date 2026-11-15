@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
-import { CheckCircle2, ExternalLink, KeyRound, X } from "lucide-react";
+import { CheckCircle2, Clipboard, ExternalLink, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
 import { removeOpenAIKeyAction, saveOpenAIKeyAction } from "@/lib/actions/openai";
 import type { ActionResult } from "@/lib/actions/types";
 import { he } from "@/lib/strings";
+import { mobileB2 } from "@/lib/mobile-strings-b2";
 
 /** Anything can open the guide by dispatching this event. */
 export const OPEN_OPENAI_SETUP = "open-openai-setup";
@@ -27,7 +29,11 @@ export function openOpenAISetup(): void {
 function SaveButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} className="sm:shrink-0">
+    <Button
+      type="submit"
+      disabled={pending}
+      className="sm:shrink-0 max-sm:h-12 max-sm:w-full"
+    >
       {pending ? he.openaiKey.saving : he.openaiKey.save}
     </Button>
   );
@@ -49,6 +55,7 @@ export function OpenAISetup() {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removing, startRemove] = useTransition();
   const [state, formAction] = useFormState<ActionResult, FormData>(saveOpenAIKeyAction, {});
+  const [keyValue, setKeyValue] = useState("");
   const checkedFor = useRef<string | null>(null);
 
   const fetchStatus = async (): Promise<OpenAIKeyStatus | null> => {
@@ -67,10 +74,24 @@ export function OpenAISetup() {
     setOpen(false);
     setReplacing(false);
     setConfirmRemove(false);
+    setKeyValue("");
     try {
       localStorage.setItem(SEEN_KEY, "1");
     } catch {
       /* ignore */
+    }
+  };
+
+  const handlePaste = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          setKeyValue(text.trim());
+        }
+      }
+    } catch {
+      // try/catch; when it fails do nothing
     }
   };
 
@@ -116,21 +137,13 @@ export function OpenAISetup() {
     void fetchStatus();
     setReplacing(false);
     setFirst(false);
+    setKeyValue("");
     try {
       localStorage.setItem(SEEN_KEY, "1");
     } catch {
       /* ignore */
     }
   }, [state, router]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  if (!open) return null;
 
   const hasOwnKey = status?.source === "user";
   const showForm = !hasOwnKey || replacing;
@@ -152,36 +165,20 @@ export function OpenAISetup() {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex animate-fade-in items-end justify-center bg-black/55 backdrop-blur-md sm:items-center"
-      onClick={(e) => e.target === e.currentTarget && close()}
+    <Sheet
+      fullScreenOnPhone
+      open={open}
+      onClose={close}
+      title={first ? he.openaiKey.welcomeTitle : he.openaiKey.title}
+      className="max-w-[560px]"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="openai-setup-title"
-        className="max-h-full w-full max-w-[560px] animate-sheet-up overflow-y-auto rounded-t-[32px] bg-background px-6 pb-[calc(24px+env(safe-area-inset-bottom,0px))] pt-5 sm:rounded-[32px]"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-soft text-primary">
-            <KeyRound className="h-5 w-5" />
-          </div>
-          <button
-            type="button"
-            onClick={close}
-            aria-label={he.openaiKey.close}
-            className="-me-2 grid h-10 w-10 place-items-center rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
+      <div className="pt-2">
+        <div className="mb-3 grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-soft text-primary">
+          <KeyRound className="h-5 w-5" />
         </div>
 
-        <h2 id="openai-setup-title" className="mt-3 text-balance text-2xl font-extrabold tracking-tight">
-          {first ? he.openaiKey.welcomeTitle : he.openaiKey.title}
-        </h2>
-
         {!showForm ? (
-          <div className="mt-4 space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center gap-3 rounded-2xl border bg-card p-4">
               <CheckCircle2 className="h-6 w-6 shrink-0 text-ok" />
               <div className="min-w-0">
@@ -190,10 +187,21 @@ export function OpenAISetup() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setReplacing(true)}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setReplacing(true);
+                  setKeyValue("");
+                }}
+              >
                 {he.openaiKey.replace}
               </Button>
-              <Button variant="ghost" disabled={removing} onClick={remove} className="text-destructive hover:text-destructive">
+              <Button
+                variant="ghost"
+                disabled={removing}
+                onClick={remove}
+                className="text-destructive hover:text-destructive"
+              >
                 {confirmRemove ? he.openaiKey.removeConfirm : he.openaiKey.remove}
               </Button>
               <Button onClick={close} className="ms-auto">
@@ -203,8 +211,10 @@ export function OpenAISetup() {
           </div>
         ) : (
           <>
-            <p className="mt-2 text-muted-foreground">{he.openaiKey.intro}</p>
-            {status?.source === "server" && <p className="mt-2 text-sm text-warn">{he.openaiKey.serverKeyNote}</p>}
+            <p className="text-muted-foreground">{he.openaiKey.intro}</p>
+            {status?.source === "server" && (
+              <p className="mt-2 text-sm text-warn">{he.openaiKey.serverKeyNote}</p>
+            )}
 
             <h3 className="mt-6 text-sm font-semibold">{he.openaiKey.stepsHeading}</h3>
             <ol className="mt-3 space-y-3">
@@ -222,7 +232,7 @@ export function OpenAISetup() {
                           href="https://platform.openai.com/api-keys"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="mt-2 inline-flex h-9 items-center gap-2 rounded-lg bg-secondary px-3.5 text-sm font-semibold hover:brightness-95 dark:hover:brightness-125"
+                          className="mt-2 inline-flex h-9 min-h-[44px] items-center gap-2 rounded-lg bg-secondary px-3.5 text-sm font-semibold hover:brightness-95 dark:hover:brightness-125"
                         >
                           <ExternalLink className="h-4 w-4" />
                           {he.openaiKey.openPlatform}
@@ -242,18 +252,32 @@ export function OpenAISetup() {
                 {he.openaiKey.keyLabel}
               </label>
               <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
-                <input
-                  id="openai-key"
-                  name="apiKey"
-                  type="password"
-                  dir="ltr"
-                  autoComplete="off"
-                  spellCheck={false}
-                  autoFocus
-                  required
-                  placeholder={he.openaiKey.keyPlaceholder}
-                  className="num h-12 w-full min-w-0 rounded-xl border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
+                <div className="flex flex-1 gap-2">
+                  <input
+                    id="openai-key"
+                    name="apiKey"
+                    type="password"
+                    dir="ltr"
+                    autoComplete="off"
+                    spellCheck={false}
+                    autoFocus
+                    required
+                    value={keyValue}
+                    onChange={(e) => setKeyValue(e.target.value)}
+                    placeholder={he.openaiKey.keyPlaceholder}
+                    className="num h-12 w-full min-w-0 rounded-xl border border-input bg-card px-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handlePaste}
+                    aria-label={mobileB2.setup.pasteAria}
+                    className="h-12 min-h-[44px] min-w-[44px] shrink-0 gap-1.5 px-3 text-sm font-semibold"
+                  >
+                    <Clipboard className="h-4 w-4" />
+                    <span>{mobileB2.setup.paste}</span>
+                  </Button>
+                </div>
                 <SaveButton />
               </div>
               {state.error && (
@@ -265,13 +289,17 @@ export function OpenAISetup() {
 
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">{he.openaiKey.privacy}</p>
             <div className="mt-4 flex justify-end">
-              <Button variant="ghost" size="sm" onClick={replacing ? () => setReplacing(false) : close}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={replacing ? () => setReplacing(false) : close}
+              >
                 {replacing ? he.openaiKey.close : he.openaiKey.later}
               </Button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }

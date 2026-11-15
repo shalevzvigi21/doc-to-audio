@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowDownToLine,
+  CloudOff,
   Folder,
   Loader2,
   MoreVertical,
@@ -18,13 +20,16 @@ import {
 } from "lucide-react";
 import type { FileRecord, TtsProvider } from "@doc-to-audio/types";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetAction } from "@/components/ui/sheet";
 import { deleteFileAction, moveFileAction, queueFileAction, renameFileAction } from "@/lib/actions/library";
 import { usePlayer } from "@/components/player/context";
 import { openOpenAISetup } from "@/components/OpenAISetup";
 import { ImportantToKnow } from "@/components/ImportantToKnow";
 import { OpenAIVoicePicker, useOpenAIChoice } from "@/components/OpenAIVoicePicker";
+import { downloadForOffline, isOffline, offlineSupported, removeOffline } from "@/lib/offline";
 import { cn, formatClock, relativeDate } from "@/lib/utils";
 import { he } from "@/lib/strings";
+import { mobileA } from "@/lib/mobile-strings-a";
 
 type FlatFolder = { id: string; name: string };
 
@@ -104,7 +109,67 @@ function FileRow({
     return () => clearInterval(id);
   }, [isBusy, jobId, router]);
 
-  // Convert drawer
+  // Offline listening support
+  const [offlineAvail, setOfflineAvail] = useState(false);
+  const [isOfflineSaved, setIsOfflineSaved] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!offlineSupported()) return;
+    setOfflineAvail(true);
+    if (!isDone || !jobId) return;
+
+    let active = true;
+    isOffline(jobId)
+      .then((saved) => {
+        if (active) setIsOfflineSaved(saved);
+      })
+      .catch(() => {
+        // ignore error silently
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isDone, jobId]);
+
+  const handleDownloadOffline = async () => {
+    if (!jobId) return;
+    setOfflineError(null);
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    try {
+      await downloadForOffline(
+        { id: jobId, name: file.name, duration: file.audioJob?.duration },
+        (fraction) => {
+          setDownloadProgress(fraction >= 0 ? Math.round(fraction * 100) : -1);
+        },
+      );
+      const saved = await isOffline(jobId);
+      setIsOfflineSaved(saved);
+    } catch {
+      setOfflineError(mobileA.downloadFailed);
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleRemoveOffline = async () => {
+    if (!jobId) return;
+    setOfflineError(null);
+    try {
+      await removeOffline(jobId);
+      const saved = await isOffline(jobId);
+      setIsOfflineSaved(saved);
+    } catch {
+      setOfflineError(mobileA.removeFailed);
+    }
+  };
+
+  // Convert sheet
   const [drawer, setDrawer] = useState(false);
   // OpenAI is the default engine.
   const [provider, setProvider] = useState<TtsProvider>("openai");
@@ -127,27 +192,9 @@ function FileRow({
     });
   };
 
-  // Menu
+  // Menu action sheet
   const [menu, setMenu] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!menu) return;
-    const close = (e: Event) => {
-      if (e instanceof KeyboardEvent) {
-        if (e.key === "Escape") setMenu(false);
-        return;
-      }
-      if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
-    };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", close);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", close);
-      setConfirmDel(false);
-    };
-  }, [menu]);
 
   // Rename
   const [isEditing, setIsEditing] = useState(false);
@@ -155,9 +202,13 @@ function FileRow({
   const inputRef = useRef<HTMLInputElement>(null);
   const startEdit = () => {
     setMenu(false);
+    setConfirmDel(false);
     setDraft(file.name);
     setIsEditing(true);
-    setTimeout(() => inputRef.current?.select(), 0);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 50);
   };
   const commitRename = () => {
     const trimmed = draft.trim();
@@ -172,6 +223,7 @@ function FileRow({
   const [copied, setCopied] = useState(false);
   const share = async () => {
     setMenu(false);
+    setConfirmDel(false);
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/share/${jobId}`);
       setCopied(true);
@@ -211,16 +263,24 @@ function FileRow({
 
   return (
     <article
+      onClick={(e) => {
+        if (!isDone || isEditing) return;
+        if ((e.target as HTMLElement).closest("button, a, input, select, textarea, [role='switch']")) {
+          return;
+        }
+        openPlayer();
+      }}
       className={cn(
-        "relative rounded-[20px] border bg-card transition-[border-color,box-shadow] hover:border-foreground/25",
+        "relative min-h-[64px] rounded-[20px] border bg-card transition-[border-color,box-shadow,background-color] hover:border-foreground/25",
         isCurrent && "border-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.16)] hover:border-primary",
+        isDone && !isEditing && "cursor-pointer active:bg-secondary/40",
       )}
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-2.5 sm:gap-3.5 sm:p-3">
+      <div className="grid min-h-[64px] grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-2.5 sm:gap-3.5 sm:p-3">
         {/* File tile (with progress ring while converting) */}
         <div
           className={cn(
-            "num relative grid h-10 w-10 place-items-center rounded-[14px] text-[11px] tracking-wide sm:h-[46px] sm:w-[46px]",
+            "num relative grid h-10 w-10 shrink-0 place-items-center rounded-[14px] text-[11px] tracking-wide sm:h-[46px] sm:w-[46px]",
             isDone ? "bg-soft text-primary" : isError ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground",
           )}
         >
@@ -228,8 +288,8 @@ function FileRow({
           {ext}
         </div>
 
-        {/* Title + meta */}
-        <div className="min-w-0">
+        {/* Title + meta (takes full width) */}
+        <div className="min-w-0 w-full flex-1">
           {isEditing ? (
             <input
               ref={inputRef}
@@ -248,7 +308,13 @@ function FileRow({
               className="h-9 w-full rounded-[10px] border border-primary bg-background px-2.5 text-sm font-medium outline-none"
             />
           ) : isDone ? (
-            <button type="button" onClick={openPlayer} dir="auto" title={file.name} className="block max-w-full truncate text-start font-medium hover:underline">
+            <button
+              type="button"
+              onClick={openPlayer}
+              dir="auto"
+              title={file.name}
+              className="block w-full max-w-full truncate text-start font-medium hover:underline"
+            >
               {displayName}
             </button>
           ) : (
@@ -283,6 +349,19 @@ function FileRow({
               </>
             )}
             <span>{relativeDate(file.createdAt)}</span>
+            {isOfflineSaved && (
+              <>
+                <Dot />
+                <span
+                  className="inline-flex items-center gap-1 text-ok"
+                  title={mobileA.offlineBadge}
+                  aria-label={mobileA.offlineBadge}
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span className="text-xs">{mobileA.offlineBadge}</span>
+                </span>
+              </>
+            )}
             {copied && (
               <>
                 <Dot />
@@ -297,18 +376,22 @@ function FileRow({
           )}
         </div>
 
-        {/* Primary action */}
+        {/* Primary action (stays on end side) */}
         {isDone ? (
           <button
             type="button"
             onClick={togglePlay}
             aria-label={isPlaying ? he.audio.pause : he.audio.play}
             className={cn(
-              "grid h-[46px] w-[46px] place-items-center rounded-full transition hover:scale-105",
+              "grid h-[46px] w-[46px] place-items-center rounded-full transition active:scale-95 hover:scale-105",
               isPlaying ? "bg-primary text-primary-foreground" : "bg-foreground text-background",
             )}
           >
-            {isPlaying ? <Pause className="h-[18px] w-[18px] fill-current" /> : <Play className="h-[18px] w-[18px] translate-x-px fill-current" />}
+            {isPlaying ? (
+              <Pause className="h-[18px] w-[18px] fill-current" />
+            ) : (
+              <Play className="h-[18px] w-[18px] translate-x-px fill-current" />
+            )}
           </button>
         ) : isBusy ? (
           <Button asChild size="sm" variant="secondary">
@@ -318,110 +401,179 @@ function FileRow({
             </Link>
           </Button>
         ) : (
-          <Button size="sm" onClick={() => setDrawer((v) => !v)} aria-expanded={drawer}>
+          <Button
+            size="sm"
+            onClick={() => setDrawer(true)}
+            aria-expanded={drawer}
+          >
             {isError ? <RotateCcw className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
             {isError ? he.file.retry : he.file.convert}
           </Button>
         )}
 
-        {/* Menu */}
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setMenu((v) => !v)}
-            aria-label={he.file.moreActions}
-            aria-haspopup="menu"
-            aria-expanded={menu}
-            disabled={isPending}
-            className="grid h-10 w-10 place-items-center rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50 max-sm:-me-1.5"
+        {/* Kebab action button (44x44) */}
+        <button
+          type="button"
+          onClick={() => setMenu(true)}
+          aria-label={he.file.moreActions}
+          aria-haspopup="dialog"
+          aria-expanded={menu}
+          disabled={isPending}
+          className="grid h-11 w-11 place-items-center rounded-xl text-muted-foreground hover:bg-secondary hover:text-foreground active:scale-95 disabled:opacity-50"
+        >
+          <MoreVertical className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Action sheet (replaces popover menu at all screen sizes) */}
+      <Sheet
+        open={menu}
+        onClose={() => {
+          setMenu(false);
+          setConfirmDel(false);
+        }}
+        title={file.name}
+      >
+        <div className="flex flex-col gap-1 py-2">
+          {/* Rename */}
+          <SheetAction
+            icon={<Pencil className="h-5 w-5" />}
+            onClick={startEdit}
           >
-            <MoreVertical className="h-5 w-5" />
-          </button>
-          {menu && (
-            <div role="menu" className="absolute end-0 top-full z-40 mt-1.5 min-w-[210px] rounded-2xl border bg-popover p-1.5 shadow-xl">
-              <MenuItem icon={<Pencil className="h-4 w-4" />} onClick={startEdit}>
-                {he.file.rename}
-              </MenuItem>
-              {isDone && (
-                <MenuItem icon={<Share2 className="h-4 w-4" />} onClick={share}>
-                  {he.file.share}
-                </MenuItem>
-              )}
-              {isBusy && (
-                <MenuItem
-                  icon={<RotateCcw className="h-4 w-4" />}
-                  onClick={() => {
-                    setMenu(false);
-                    startTransition(async () => {
-                      await queueFileAction(file.id);
-                      router.refresh();
-                    });
-                  }}
-                >
-                  {he.file.restart}
-                </MenuItem>
-              )}
-              {allFolders.length > 0 && (
-                <>
-                  <div className="my-1.5 h-px bg-border" />
-                  <div className="px-3 pb-0.5 pt-1.5 text-[11px] text-muted-foreground">{he.file.moveTo}</div>
-                  <MenuItem
-                    icon={<Folder className="h-4 w-4" />}
-                    active={!file.folderId}
-                    onClick={() => {
-                      setMenu(false);
-                      startTransition(async () => {
-                        await moveFileAction(file.id, null);
-                      });
-                    }}
-                  >
-                    {he.file.moveRoot}
-                  </MenuItem>
-                  {allFolders.map((f) => (
-                    <MenuItem
-                      key={f.id}
-                      icon={<Folder className="h-4 w-4" />}
-                      active={file.folderId === f.id}
-                      onClick={() => {
-                        setMenu(false);
-                        startTransition(async () => {
-                          await moveFileAction(file.id, f.id);
-                        });
-                      }}
-                    >
-                      <span dir="auto">{f.name}</span>
-                    </MenuItem>
-                  ))}
-                </>
-              )}
-              <div className="my-1.5 h-px bg-border" />
-              <MenuItem
-                danger
-                icon={<Trash2 className="h-4 w-4" />}
+            {he.file.rename}
+          </SheetAction>
+
+          {/* Share (DONE only) */}
+          {isDone && (
+            <SheetAction
+              icon={<Share2 className="h-5 w-5" />}
+              onClick={share}
+            >
+              {he.file.share}
+            </SheetAction>
+          )}
+
+          {/* Offline listening download (DONE only, offlineSupported only) */}
+          {isDone && offlineAvail && (
+            <SheetAction
+              icon={
+                isDownloading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                ) : isOfflineSaved ? (
+                  <CloudOff className="h-5 w-5" />
+                ) : (
+                  <ArrowDownToLine className="h-5 w-5" />
+                )
+              }
+              disabled={isDownloading}
+              onClick={isOfflineSaved ? handleRemoveOffline : handleDownloadOffline}
+            >
+              <div className="flex flex-col items-start min-w-0">
+                <span className="truncate">
+                  {isDownloading
+                    ? downloadProgress !== null && downloadProgress >= 0
+                      ? mobileA.downloadingPercent(downloadProgress)
+                      : mobileA.downloading
+                    : isOfflineSaved
+                      ? mobileA.removeOffline
+                      : mobileA.downloadOffline}
+                </span>
+                {offlineError && (
+                  <span className="text-xs font-normal text-destructive">{offlineError}</span>
+                )}
+              </div>
+            </SheetAction>
+          )}
+
+          {/* Restart (busy only) */}
+          {isBusy && (
+            <SheetAction
+              icon={<RotateCcw className="h-5 w-5" />}
+              onClick={() => {
+                setMenu(false);
+                setConfirmDel(false);
+                startTransition(async () => {
+                  await queueFileAction(file.id);
+                  router.refresh();
+                });
+              }}
+            >
+              {he.file.restart}
+            </SheetAction>
+          )}
+
+          {/* Move to folder group */}
+          {allFolders.length > 0 && (
+            <>
+              <div className="my-2 h-px bg-border" />
+              <div className="px-4 pb-1 pt-1 text-xs font-medium text-muted-foreground">
+                {he.file.moveTo}
+              </div>
+              <SheetAction
+                icon={<Folder className="h-5 w-5" />}
+                selected={!file.folderId}
                 onClick={() => {
-                  if (!confirmDel) {
-                    setConfirmDel(true);
-                    return;
-                  }
                   setMenu(false);
+                  setConfirmDel(false);
                   startTransition(async () => {
-                    await deleteFileAction(file.id);
+                    await moveFileAction(file.id, null);
                   });
                 }}
               >
-                {confirmDel ? he.file.deleteConfirm : he.file.deleteFile}
-              </MenuItem>
-            </div>
+                {he.file.moveRoot}
+              </SheetAction>
+              {allFolders.map((f) => (
+                <SheetAction
+                  key={f.id}
+                  icon={<Folder className="h-5 w-5" />}
+                  selected={file.folderId === f.id}
+                  onClick={() => {
+                    setMenu(false);
+                    setConfirmDel(false);
+                    startTransition(async () => {
+                      await moveFileAction(file.id, f.id);
+                    });
+                  }}
+                >
+                  <span dir="auto">{f.name}</span>
+                </SheetAction>
+              ))}
+            </>
           )}
-        </div>
-      </div>
 
-      {/* Convert drawer */}
-      {drawer && !isDone && !isBusy && (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4 border-t px-4 pb-4 pt-3.5">
-          <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-            {he.file.engine}
-            <div role="group" className="inline-flex rounded-xl bg-secondary p-[3px]">
+          {/* Delete (danger, 2-tap confirmation) */}
+          <div className="my-2 h-px bg-border" />
+          <SheetAction
+            danger
+            icon={<Trash2 className="h-5 w-5" />}
+            onClick={() => {
+              if (!confirmDel) {
+                setConfirmDel(true);
+                return;
+              }
+              setMenu(false);
+              setConfirmDel(false);
+              startTransition(async () => {
+                await deleteFileAction(file.id);
+              });
+            }}
+          >
+            {confirmDel ? he.file.deleteConfirm : he.file.deleteFile}
+          </SheetAction>
+        </div>
+      </Sheet>
+
+      {/* Convert sheet (replaces inline convert drawer) */}
+      <Sheet
+        open={drawer}
+        onClose={() => setDrawer(false)}
+        title={he.file.convert}
+      >
+        <div className="flex flex-col gap-5 py-3">
+          {/* Engine segmented control */}
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium text-muted-foreground">{he.file.engine}</span>
+            <div role="group" className="grid grid-cols-3 rounded-2xl bg-secondary p-1">
               {(["gemini", "openai", "azure"] as const).map((p) => (
                 <button
                   key={p}
@@ -431,8 +583,8 @@ function FileRow({
                   title={p === "azure" && !azureAvailable ? he.tts.azureUnavailable : undefined}
                   onClick={() => setProvider(p)}
                   className={cn(
-                    "rounded-[9px] px-4 py-1.5 text-sm text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40",
-                    provider === p && "bg-card text-foreground shadow-sm",
+                    "h-11 rounded-xl text-sm font-medium text-muted-foreground transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40",
+                    provider === p && "bg-card font-semibold text-foreground shadow-sm",
                   )}
                 >
                   {p === "gemini"
@@ -445,36 +597,52 @@ function FileRow({
             </div>
           </div>
 
+          {/* OpenAI voice picker when openai is selected */}
           {provider === "openai" && (
-            <OpenAIVoicePicker value={openaiChoice} onChange={setOpenaiChoice} disabled={isPending} />
+            <OpenAIVoicePicker
+              value={openaiChoice}
+              onChange={setOpenaiChoice}
+              disabled={isPending}
+            />
           )}
 
-          <ImportantToKnow />
-
-          <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-            {he.file.twoColumns}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={reconstruct}
-              disabled={isPending}
-              title={he.file.multiColumnHint}
-              onClick={() => setReconstruct((v) => !v)}
-              className="inline-flex items-center gap-2.5 text-sm text-foreground"
-            >
-              <span className={cn("relative h-6 w-10 rounded-full transition", reconstruct ? "bg-primary" : "bg-secondary")}>
+          {/* Multi-column layout switch */}
+          <div className="flex flex-col gap-2 rounded-2xl border bg-card p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">{he.file.twoColumns}</span>
+                <span className="text-xs text-muted-foreground">{he.file.multiColumnHint}</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={reconstruct}
+                disabled={isPending}
+                title={he.file.multiColumnHint}
+                onClick={() => setReconstruct((v) => !v)}
+                className="inline-flex items-center gap-2.5 text-sm text-foreground transition active:scale-95"
+              >
                 <span
                   className={cn(
-                    "absolute top-[3px] h-[18px] w-[18px] rounded-full transition-all",
-                    reconstruct ? "bg-white start-[19px]" : "bg-muted-foreground start-[3px]",
+                    "relative h-6 w-10 rounded-full transition",
+                    reconstruct ? "bg-primary" : "bg-secondary",
                   )}
-                />
-              </span>
-              {he.file.multiColumn}
-            </button>
-            <details className="max-w-[320px] text-xs">
-              <summary className="cursor-pointer select-none text-primary">{he.file.multiColumnHelpTitle}</summary>
-              <div className="mt-1.5 space-y-1.5 leading-relaxed">
+                >
+                  <span
+                    className={cn(
+                      "absolute top-[3px] h-[18px] w-[18px] rounded-full transition-all",
+                      reconstruct ? "bg-white start-[19px]" : "bg-muted-foreground start-[3px]",
+                    )}
+                  />
+                </span>
+                <span className="sr-only">{he.file.multiColumn}</span>
+              </button>
+            </div>
+            <details className="mt-1 text-xs">
+              <summary className="cursor-pointer select-none text-primary hover:underline">
+                {he.file.multiColumnHelpTitle}
+              </summary>
+              <div className="mt-2 space-y-1.5 leading-relaxed text-muted-foreground">
                 <p className="font-medium text-foreground">{he.file.multiColumnHelpOn}</p>
                 <ul className="list-disc space-y-0.5 ps-4">
                   {he.file.multiColumnHelpOnItems.map((t) => (
@@ -483,56 +651,34 @@ function FileRow({
                 </ul>
                 <p>{he.file.multiColumnHelpOff}</p>
                 <p>{he.file.multiColumnHelpWhy}</p>
-                <p className="text-warn">{he.file.multiColumnHelpCost}</p>
+                <p className="font-medium text-warn">{he.file.multiColumnHelpCost}</p>
               </div>
             </details>
           </div>
 
-          <div className="flex flex-col items-start gap-1 max-sm:w-full sm:ms-auto">
-            <Button onClick={startConvert} disabled={isPending} className="max-sm:w-full">
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {/* Important to know panel */}
+          <ImportantToKnow />
+
+          {/* Bottom 52px primary Convert button */}
+          <div className="pt-2">
+            <Button
+              type="button"
+              onClick={startConvert}
+              disabled={isPending}
+              className="h-[52px] w-full text-base font-semibold"
+            >
+              {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               {he.file.startConvert}
             </Button>
             {actionError && (
-              <p role="alert" className="text-xs text-destructive">
+              <p role="alert" className="mt-2 text-center text-sm font-medium text-destructive">
                 {actionError}
               </p>
             )}
           </div>
         </div>
-      )}
+      </Sheet>
     </article>
-  );
-}
-
-function MenuItem({
-  icon,
-  children,
-  onClick,
-  danger,
-  active,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-  active?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-start text-sm hover:bg-secondary",
-        danger && "text-destructive",
-        active && "font-semibold",
-      )}
-    >
-      {icon}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      {active && <span aria-hidden="true">✓</span>}
-    </button>
   );
 }
 
@@ -556,7 +702,10 @@ export function FileList({
   return (
     <div className="mt-3.5 flex flex-col gap-2">
       {items.map((item) => (
-        <FileRow key={item.file.id} item={item} allFolders={allFolders}
+        <FileRow
+          key={item.file.id}
+          item={item}
+          allFolders={allFolders}
           azureAvailable={azureAvailable}
         />
       ))}

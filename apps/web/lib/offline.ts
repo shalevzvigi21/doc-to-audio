@@ -59,31 +59,25 @@ export async function downloadForOffline(
   if (!res.ok || !res.body) throw new Error(`Download failed (${res.status})`);
 
   const total = Number(res.headers.get("content-length")) || 0;
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
   let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.length;
-    onProgress?.(total ? received / total : -1);
-  }
-
-  const blob = new Blob(chunks as BlobPart[], { type: "audio/mpeg" });
+  // Stream straight into the cache: the whole MP3 is never held in JS memory (a 50 MB
+  // file twice over can get an iOS Safari tab killed).
+  const counter = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      received += chunk.length;
+      onProgress?.(total ? received / total : -1);
+      controller.enqueue(chunk);
+    },
+  });
   const cache = await caches.open(AUDIO_CACHE);
-  await cache.put(
-    audioKey(track.id),
-    new Response(blob, {
-      status: 200,
-      headers: { "Content-Type": "audio/mpeg", "Content-Length": String(blob.size), "Accept-Ranges": "bytes" },
-    }),
-  );
+  const headers: Record<string, string> = { "Content-Type": "audio/mpeg", "Accept-Ranges": "bytes" };
+  if (total) headers["Content-Length"] = String(total);
+  await cache.put(audioKey(track.id), new Response(res.body.pipeThrough(counter), { status: 200, headers }));
   const meta: OfflineEntry = {
     id: track.id,
     name: track.name,
     duration: track.duration ?? 0,
-    bytes: blob.size,
+    bytes: received,
     savedAt: Date.now(),
   };
   await cache.put(metaKey(track.id), new Response(JSON.stringify(meta), { headers: { "Content-Type": "application/json" } }));
@@ -95,6 +89,42 @@ export async function downloadForOffline(
     /* not available */
   }
   onProgress?.(1);
+}
+
+/**
+ * Delete every downloaded document. Cache Storage is per browser profile, not per user,
+ * so this runs on logout and when a different account signs in; otherwise the next person
+ * on a shared phone could list and play the previous user's downloads (also from offline.html).
+ */
+export async function purgeOffline(): Promise<void> {
+  try {
+    localStorage.removeItem(OWNER_KEY);
+  } catch {
+    /* storage blocked */
+  }
+  if (typeof window !== "undefined" && "caches" in window) {
+    await caches.delete(AUDIO_CACHE);
+  }
+}
+
+const OWNER_KEY = "offline-owner";
+
+/** Remember who the downloads belong to; purge them when a different email signs in. */
+export async function claimOfflineOwner(email: string): Promise<void> {
+  const next = email.trim().toLowerCase();
+  if (!next) return;
+  let prev: string | null = null;
+  try {
+    prev = localStorage.getItem(OWNER_KEY);
+  } catch {
+    /* storage blocked */
+  }
+  if (prev && prev !== next) await purgeOffline();
+  try {
+    localStorage.setItem(OWNER_KEY, next);
+  } catch {
+    /* storage blocked */
+  }
 }
 
 export async function removeOffline(id: string): Promise<void> {

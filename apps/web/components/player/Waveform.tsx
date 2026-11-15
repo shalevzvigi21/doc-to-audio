@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { cn } from "@/lib/utils";
+import { useMemo, useRef, useState } from "react";
+import { cn, formatClock } from "@/lib/utils";
 
 const BARS = 64;
 
@@ -37,15 +37,61 @@ export function Waveform({
 }) {
   const bars = useMemo(() => heights(id), [id]);
   const ref = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragFraction, setDragFraction] = useState<number | null>(null);
 
-  const seekFromPointer = (clientX: number) => {
+  const seekFromPointer = (clientX: number): number => {
     const r = ref.current?.getBoundingClientRect();
-    if (!r || r.width === 0) return;
-    onSeek(Math.max(0, Math.min(1, (clientX - r.left) / r.width)));
+    if (!r || r.width === 0) return 0;
+    const fraction = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    onSeek(fraction);
+    return fraction;
   };
 
-  const played = Math.floor(progress * BARS);
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    setIsDragging(true);
+    const frac = seekFromPointer(e.clientX);
+    setDragFraction(frac);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    const frac = seekFromPointer(e.clientX);
+    setDragFraction(frac);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    setIsDragging(false);
+    setDragFraction(null);
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    setIsDragging(false);
+    setDragFraction(null);
+  };
+
+  const currentFraction = Math.max(
+    0,
+    Math.min(1, isDragging && dragFraction !== null ? dragFraction : progress),
+  );
+  const played = Math.floor(currentFraction * BARS);
+  const activeTime = currentFraction * total;
 
   return (
     <div
@@ -57,15 +103,11 @@ export function Waveform({
       aria-valuemin={0}
       aria-valuemax={Math.floor(total)}
       aria-valuenow={Math.floor(current)}
-      className="mt-6 flex h-28 cursor-pointer touch-none select-none items-center gap-[3px] rounded-lg"
-      onPointerDown={(e) => {
-        dragging.current = true;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        seekFromPointer(e.clientX);
-      }}
-      onPointerMove={(e) => dragging.current && seekFromPointer(e.clientX)}
-      onPointerUp={() => (dragging.current = false)}
-      onPointerCancel={() => (dragging.current = false)}
+      className="relative mt-6 flex h-[112px] cursor-pointer touch-none select-none items-center gap-[3px] rounded-lg"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onKeyDown={(e) => {
         if (total <= 0) return;
         const step = 5 / total;
@@ -73,6 +115,7 @@ export function Waveform({
         if (e.key === "ArrowLeft") onSeek(Math.max(0, progress - step));
       }}
     >
+      {/* Waveform bars */}
       {bars.map((h, i) => (
         <i
           key={i}
@@ -83,6 +126,27 @@ export function Waveform({
           )}
         />
       ))}
+
+      {/* Visible circular scrub handle: 16px resting, 24px while dragging */}
+      <div
+        className={cn(
+          "pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-background shadow-md transition-all duration-100",
+          isDragging ? "h-6 w-6" : "h-4 w-4",
+        )}
+        style={{ left: `${currentFraction * 100}%` }}
+        aria-hidden="true"
+      />
+
+      {/* Floating time label above finger while scrubbing */}
+      {isDragging && (
+        <div
+          className="pointer-events-none absolute -top-10 -translate-x-1/2 rounded-full bg-foreground px-2.5 py-1 text-xs font-semibold text-background shadow-lg num whitespace-nowrap"
+          style={{ left: `${currentFraction * 100}%` }}
+          aria-hidden="true"
+        >
+          {formatClock(activeTime)}
+        </div>
+      )}
     </div>
   );
 }
