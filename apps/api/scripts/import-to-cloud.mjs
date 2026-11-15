@@ -77,6 +77,8 @@ console.log("Waking the cloud server (can take up to a minute)...");
 const login = await call("POST", "/auth/login", { json: { email, password } });
 if (!login.ok || !login.data?.token) {
   console.error(`Cloud login failed (${login.status}). Check the email/password, or register on the site first.`);
+  await prisma.$disconnect();
+  await sleep(500); // let sockets close first; exiting too early trips a libuv assertion on Windows
   process.exit(1);
 }
 const token = login.data.token;
@@ -152,4 +154,5 @@ for (const row of rows) {
 
 console.log(`\nDone. Imported ${imported}, skipped ${skipped}, failed ${failed}.${dryRun ? " (dry run, nothing was uploaded)" : ""}`);
 await prisma.$disconnect();
+await sleep(500); // let sockets close first; exiting too early trips a libuv assertion on Windows
 process.exit(failed ? 2 : 0);
