@@ -2,12 +2,16 @@ import { mkdir } from "node:fs/promises";
 import { buildServer } from "./server.js";
 import { config } from "./config.js";
 import { startConversionWorker } from "./workers/conversion.worker.js";
+import { ensureApprovalSetup } from "./lib/approval.js";
 
 async function main() {
   // Ensure the upload root exists before serving requests.
   await mkdir(config.uploadDir, { recursive: true });
 
   const app = await buildServer();
+
+  // Approval mode: make sure the admin account is set up (and run the one-time migration). Never blocks startup.
+  await ensureApprovalSetup().catch((err) => app.log.error(err, "approval setup failed"));
 
   // Start the BullMQ conversion worker in-process, alongside the HTTP server.
   const worker = startConversionWorker();

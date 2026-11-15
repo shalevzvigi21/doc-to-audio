@@ -77,6 +77,58 @@ export interface AuthResponse {
   user: User;
 }
 
+/** Returned (HTTP 202, no token) when a new account is waiting for the admin's approval. */
+export interface PendingApprovalResponse {
+  status: "PENDING";
+}
+
+export type UserStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+/** Error codes of a 403 from POST /auth/login. */
+export type AuthBlockedCode = "PENDING_APPROVAL" | "REJECTED";
+
+/** GET /me/profile */
+export interface MeProfile {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+}
+
+/* ------------------------------ Admin payloads ------------------------------ */
+
+export interface AdminSummary {
+  totalUsers: number;
+  pendingUsers: number;
+  approvedUsers: number;
+  rejectedUsers: number;
+  newThisWeek: number;
+  /** Distinct users with a login in the last 1 / 7 / 30 days. */
+  activeDay: number;
+  activeWeek: number;
+  activeMonth: number;
+  documentsConverted: number;
+  audioHours: number;
+}
+
+export interface AdminDayPoint {
+  /** YYYY-MM-DD (UTC) */
+  day: string;
+  signups: number;
+  logins: number;
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  status: UserStatus;
+  isAdmin: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  loginCount: number;
+  documents: number;
+  audioMinutes: number;
+}
+
 export interface JwtPayload {
   sub: string;
   email: string;

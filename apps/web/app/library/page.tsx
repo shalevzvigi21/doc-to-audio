@@ -13,7 +13,7 @@ import { IosInstallBanner } from "@/components/InstallHint";
 import NewFolderForm from "@/components/NewFolderForm";
 import { cn } from "@/lib/utils";
 import { he } from "@/lib/strings";
-import type { FileRecord, FileTree, FolderNode, TtsQuotaResponse } from "@doc-to-audio/types";
+import type { FileRecord, FileTree, FolderNode, MeProfile, TtsQuotaResponse } from "@doc-to-audio/types";
 
 function flattenFolders(nodes: FolderNode[]): Array<{ id: string; name: string }> {
   return nodes.flatMap((n) => [{ id: n.id, name: n.name }, ...flattenFolders(n.children)]);
@@ -57,6 +57,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
   }
 
   const quota = await apiFetch<TtsQuotaResponse>("/tts/quota").catch(() => null);
+  const profile = await apiFetch<MeProfile>("/me/profile").catch(() => null);
   const azureAvailable = quota?.azureAvailable ?? false;
   const allFolders = flattenFolders(tree.folders);
 
@@ -80,7 +81,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: { fo
 
   return (
     <div className="mx-auto max-w-[880px] px-4 pb-36">
-      <TopBar quota={quota}>
+      <TopBar quota={quota} isAdmin={profile?.isAdmin === true}>
         <GeminiQuota initial={quota} />
         <OpenAIUsage />
         <LogoutButton />

@@ -12,6 +12,7 @@ import ttsRoutes from "./routes/tts.js";
 import geminiKeyRoutes from "./routes/gemini-key.js";
 import diagnosticsRoutes from "./routes/diagnostics.js";
 import openaiRoutes from "./routes/openai.js";
+import adminRoutes from "./routes/admin.js";
 import { logUserError } from "./lib/error-log.js";
 
 /** Build and configure the Fastify instance (without starting to listen). */
@@ -54,6 +55,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(geminiKeyRoutes);
   await app.register(diagnosticsRoutes);
   await app.register(openaiRoutes);
+  await app.register(adminRoutes);
 
   app.setErrorHandler((error, request, reply) => {
     request.log.error(error);

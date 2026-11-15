@@ -56,6 +56,14 @@ const envSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().optional().default(""),
   R2_SECRET_ACCESS_KEY: z.string().optional().default(""),
   R2_BUCKET: z.string().optional().default(""),
+  // New-user approval. Enforced only when REQUIRE_APPROVAL is true AND ADMIN_EMAIL is set.
+  REQUIRE_APPROVAL: z.string().optional().default(""),
+  ADMIN_EMAIL: z.string().optional().default(""),
+  /** Public URL of the web app (links in emails) and of this API (approve/reject links). */
+  WEB_PUBLIC_URL: z.string().optional().default("http://localhost:3000"),
+  API_PUBLIC_URL: z.string().optional().default("http://localhost:4000"),
+  /** Shared secret with the web app's /api/notify route, which sends the emails (Render blocks SMTP). */
+  NOTIFY_SECRET: z.string().optional().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -112,6 +120,12 @@ export const config = {
   r2Bucket: env.R2_BUCKET,
   /** True when all four R2 credentials are present. */
   r2Configured: Boolean(env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET),
+  adminEmail: env.ADMIN_EMAIL.trim().toLowerCase(),
+  /** Approval is enforced only with a known admin; without one nobody could approve anybody. */
+  approvalRequired: /^(1|true|yes)$/i.test(env.REQUIRE_APPROVAL.trim()) && Boolean(env.ADMIN_EMAIL.trim()),
+  webPublicUrl: env.WEB_PUBLIC_URL.replace(/\/$/, ""),
+  apiPublicUrl: env.API_PUBLIC_URL.replace(/\/$/, ""),
+  notifySecret: env.NOTIFY_SECRET,
 } as const;
 
 export const CONVERSION_QUEUE_NAME = "conversion";

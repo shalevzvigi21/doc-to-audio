@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, LogOut, Moon, Sun } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, LogOut, Moon, Sun, Users } from "lucide-react";
 import { Sheet } from "@/components/ui/sheet";
 import { GeminiQuota } from "@/components/GeminiQuota";
 import { OpenAIUsage } from "@/components/OpenAIUsage";
@@ -11,6 +12,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogoutButton } from "@/components/LogoutButton";
 import { InstallRow } from "@/components/InstallHint";
 import { mobileB1 } from "@/lib/mobile-strings-b1";
+import { mobileAdmin } from "@/lib/mobile-strings-admin";
 import { he } from "@/lib/strings";
 import type { TtsQuotaResponse } from "@doc-to-audio/types";
 
@@ -24,6 +26,8 @@ export interface StatusSheetProps {
   open?: boolean;
   onClose?: () => void;
   quota?: TtsQuotaResponse | null;
+  /** Show the owner-only link to the user-management screen. */
+  isAdmin?: boolean;
 }
 
 /**
@@ -39,6 +43,7 @@ export function StatusSheet({
   open: controlledOpen,
   onClose: controlledOnClose,
   quota,
+  isAdmin,
 }: StatusSheetProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -125,6 +130,18 @@ export function StatusSheet({
           </div>
           <ThemeToggle />
         </div>
+
+        {/* Owner-only: user approvals + analytics */}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            onClick={handleClose}
+            className="flex h-[52px] w-full items-center gap-3.5 rounded-2xl border bg-card px-4 text-start font-medium text-foreground transition hover:bg-secondary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Users className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <span className="flex-1 truncate">{mobileAdmin.header.title}</span>
+          </Link>
+        )}
 
         {/* Install app row */}
         <InstallRow />

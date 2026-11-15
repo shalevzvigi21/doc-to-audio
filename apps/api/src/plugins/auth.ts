@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { verifyToken } from "../lib/jwt.js";
+import { config } from "../config.js";
+import { getUserAccess, mayUseApp } from "../lib/approval.js";
 
 /** The authenticated principal attached to each request after verification. */
 export interface AuthUser {
@@ -19,7 +21,7 @@ declare module "fastify" {
 }
 
 /** Routes whose path starts with one of these prefixes skip authentication. */
-const PUBLIC_PREFIXES = ["/auth/", "/health", "/audio/public/"];
+const PUBLIC_PREFIXES = ["/auth/", "/health", "/audio/public/", "/admin/decision"];
 
 function isPublic(url: string): boolean {
   // Strip query string before matching.
@@ -48,16 +50,36 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         });
         return;
       }
+      let payload;
       try {
-        const payload = verifyToken(token);
-        request.user = { id: payload.sub, email: payload.email };
+        payload = verifyToken(token);
       } catch {
         await reply.code(401).send({
           statusCode: 401,
           error: "Unauthorized",
           message: "Invalid or expired token",
         });
+        return;
       }
+
+      // With approval enabled, an old token must stop working the moment the account is not approved.
+      if (config.approvalRequired) {
+        const access = await getUserAccess(payload.sub);
+        if (!access) {
+          await reply.code(401).send({ statusCode: 401, error: "Unauthorized", message: "Invalid or expired token" });
+          return;
+        }
+        if (!mayUseApp(access)) {
+          await reply.code(403).send({
+            statusCode: 403,
+            error: "Forbidden",
+            code: access.status === "REJECTED" ? "REJECTED" : "PENDING_APPROVAL",
+            message: "This account is not approved",
+          });
+          return;
+        }
+      }
+      request.user = { id: payload.sub, email: payload.email };
     },
   );
 

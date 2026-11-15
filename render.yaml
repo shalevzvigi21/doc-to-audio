@@ -30,6 +30,16 @@ services:
         sync: false        # Optional: comma-separated list for quota rotation
       - key: CORS_ORIGIN
         sync: false        # Your web service URL, e.g. https://doc-to-audio-web.onrender.com
+      - key: ADMIN_EMAIL
+        sync: false        # Owner account: gets sign-up approval emails and the /admin screen
+      - key: REQUIRE_APPROVAL
+        sync: false        # Set to true LAST, after the email test works
+      - key: WEB_PUBLIC_URL
+        sync: false        # e.g. https://doc-to-audio-web.vercel.app
+      - key: API_PUBLIC_URL
+        sync: false        # e.g. https://doc-to-audio-api.onrender.com
+      - key: NOTIFY_SECRET
+        sync: false        # Same long random string as on the web app
       - key: UPLOAD_DIR
         value: /tmp/uploads
       - key: R2_ACCOUNT_ID

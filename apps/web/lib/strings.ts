@@ -31,6 +31,12 @@ export const he = {
     haveAccountPrompt: "כבר יש לכם חשבון? ",
     signUpLink: "הרשמה",
     signInLink: "התחברות",
+    pendingLogin: "החשבון שלך ממתין לאישור. נשלח אליך מייל ברגע שהגישה תאושר.",
+    rejectedLogin: "הבקשה לחשבון הזה לא אושרה.",
+    tooManySignups: "יותר מדי נסיונות הרשמה כרגע. נסו שוב מאוחר יותר.",
+    pendingTitle: "הבקשה נשלחה",
+    pendingBody: "תודה! בקשת ההרשמה שלך הועברה לאישור. כשהגישה תאושר תקבל הודעה במייל ואז אפשר להתחבר.",
+    pendingBack: "חזרה להתחברות",
   },
 
   library: {

@@ -19,9 +19,42 @@ model User {
   openaiKeyEnc   String?
   openaiKeyLast4 String?
   createdAt    DateTime @default(now())
+  /// Access status. Defaults to APPROVED so installs without REQUIRE_APPROVAL (local dev) are never blocked;
+  /// the register route creates PENDING users only when approval is enabled.
+  status       UserStatus @default(APPROVED)
+  isAdmin      Boolean    @default(false)
+  lastLoginAt  DateTime?
+  loginCount   Int        @default(0)
+  decidedAt    DateTime?
   folders      Folder[]
   files        File[]
   usage        UsageEntry[]
+  logins       LoginEvent[]
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// One row per successful login, for activity analytics (daily/weekly/monthly active users).
+model LoginEvent {
+  id     String   @id @default(cuid())
+  userId String
+  at     DateTime @default(now())
+  /// "mobile" | "desktop", from the User-Agent only (no IP or location is stored).
+  device String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([at])
+  @@index([userId, at])
+}
+
+/// Small key/value store (e.g. marks that the one-time approval migration has run).
+model AppSetting {
+  key   String @id
+  value String
 }
 
 /// One billable OpenAI speech request (a finished conversion or a voice sample),

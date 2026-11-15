@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const AUTH_COOKIE = "auth_token";
-const PROTECTED_PREFIXES = ["/library", "/player"];
+const PROTECTED_PREFIXES = ["/library", "/player", "/admin"];
 const AUTH_PAGES = ["/login", "/register"];
 
 /**
@@ -37,5 +37,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/library/:path*", "/player/:path*", "/login", "/register"],
+  matcher: ["/", "/library/:path*", "/player/:path*", "/admin/:path*", "/login", "/register"],
 };
