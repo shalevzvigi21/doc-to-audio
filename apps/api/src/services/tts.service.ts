@@ -1,3 +1,4 @@
+import { createWriteStream } from "node:fs";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -497,7 +498,20 @@ export async function encodePcmToMp3(
   const workDir = await mkdtemp(path.join(tmpdir(), "doc2audio-tts-"));
   try {
     const pcmPath = path.join(workDir, "audio.pcm");
-    await writeFile(pcmPath, Buffer.concat(pcmBuffers));
+    // Write chunk by chunk and release each one as it is written. Buffer.concat would hold a
+    // second full copy of the audio (about 150 MB for 50 minutes), too much on a 512 MB host.
+    const pcmOut = createWriteStream(pcmPath);
+    for (let i = 0; i < pcmBuffers.length; i++) {
+      const chunk = pcmBuffers[i];
+      if (chunk.length > 0 && !pcmOut.write(chunk)) {
+        await new Promise<void>((resolve) => pcmOut.once("drain", () => resolve()));
+      }
+      pcmBuffers[i] = Buffer.alloc(0);
+    }
+    await new Promise<void>((resolve, reject) => {
+      pcmOut.once("error", reject);
+      pcmOut.end(() => resolve());
+    });
 
     await mkdir(path.dirname(outputPath), { recursive: true });
     await pcmToMp3(pcmPath, sampleRate, outputPath);

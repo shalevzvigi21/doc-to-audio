@@ -1,10 +1,45 @@
+import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, totalmem } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import tesseract from "node-tesseract-ocr";
 import sharp from "sharp";
 import { fromPath } from "pdf2pic";
 import mammoth from "mammoth";
+
+const execFileAsync = promisify(execFile);
+
+/** The container's memory limit (cgroup v2/v1) or the machine's RAM, whichever is smaller. */
+function memoryLimitBytes(): number {
+  let limit = totalmem();
+  for (const file of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+    try {
+      const n = Number(readFileSync(file, "utf8").trim());
+      if (Number.isFinite(n) && n > 0) limit = Math.min(limit, n);
+    } catch {
+      /* not in a cgroup */
+    }
+  }
+  return limit;
+}
+
+/**
+ * Small hosts (Render's free plan has 512 MB) crash when every page of a scanned PDF is
+ * rendered at once and several Tesseract processes run in parallel; the server restarts and
+ * the same job is re-delivered, so the file sits at 0% forever. On small hosts we read one
+ * page at a time at a slightly lower resolution. Override with OCR_PAGE_CONCURRENCY.
+ */
+const LOW_MEMORY = process.env.OCR_LOW_MEMORY
+  ? process.env.OCR_LOW_MEMORY !== "0"
+  : memoryLimitBytes() <= 1.5 * 1024 ** 3;
+const PAGE_CONCURRENCY = Number(process.env.OCR_PAGE_CONCURRENCY) || (LOW_MEMORY ? 1 : 3);
+if (LOW_MEMORY) {
+  sharp.cache(false);
+  sharp.concurrency(1);
+  process.env.OMP_THREAD_LIMIT ??= "1"; // one Tesseract thread per process
+}
 
 /** Extensions read directly as UTF-8 text — no OCR involved. */
 const PLAIN_TEXT_EXTENSIONS = new Set([".txt", ".md"]);
@@ -23,14 +58,37 @@ const TESSERACT_CONFIG = {
  * ~768x512 thumbnail, which destroys OCR accuracy). Explicit width/height with
  * preserveAspectRatio forces a crisp ~300 DPI A4-sized render.
  */
-const PDF_OPTIONS = {
-  density: 300,
-  format: "png" as const,
-  saveFilename: "page",
-  width: 2480,
-  height: 3508,
-  preserveAspectRatio: true,
-};
+const PDF_OPTIONS = LOW_MEMORY
+  ? { density: 220, format: "png" as const, saveFilename: "page", width: 1819, height: 2573, preserveAspectRatio: true }
+  : { density: 300, format: "png" as const, saveFilename: "page", width: 2480, height: 3508, preserveAspectRatio: true };
+
+type PdfPageResult = { buffer?: Buffer; base64?: string; path?: string };
+
+async function pageResultToBuffer(page: PdfPageResult): Promise<Buffer | null> {
+  if (page.buffer) return page.buffer;
+  if (page.base64) return Buffer.from(page.base64, "base64");
+  if (page.path) return readFile(page.path);
+  return null;
+}
+
+/** Number of pages in a PDF via Ghostscript (already needed by pdf2pic), or 0 if it cannot be read. */
+async function pdfPageCount(filePath: string): Promise<number> {
+  const psPath = filePath.replace(/\\/g, "/").replace(/([()])/g, "\\$1");
+  for (const bin of ["gs", "gswin64c", "gswin32c"]) {
+    try {
+      const { stdout } = await execFileAsync(
+        bin,
+        ["-q", "-dNODISPLAY", "-dNOSAFER", "-dNOPAUSE", "-dBATCH", "-c", `(${psPath}) (r) file runpdfbegin pdfpagecount = quit`],
+        { timeout: 60_000 },
+      );
+      const n = Number.parseInt(stdout.trim(), 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    } catch {
+      /* try the next binary name */
+    }
+  }
+  return 0;
+}
 
 /**
  * Render every page of a PDF to a PNG buffer. Works across pdf2pic response
@@ -131,37 +189,55 @@ export async function extractTextPages(
   const workDir = await mkdtemp(path.join(tmpdir(), "doc2audio-ocr-"));
 
   try {
-    const pageImages =
-      ext === ".pdf"
-        ? await pdfToImageBuffers(filePath, workDir)
-        : [await readFile(filePath)];
+    const isPdf = ext === ".pdf";
+    // Render PDF pages one at a time (never all at once) so memory stays flat.
+    const pageCount = isPdf ? await pdfPageCount(filePath) : 1;
 
-    if (pageImages.length === 0) {
+    // Page source: one rendered page image on demand. If the page count could not be read,
+    // fall back to rendering the whole PDF in one go (the old behaviour).
+    let loadPage: (index: number) => Promise<Buffer>;
+    let total = pageCount;
+    if (!isPdf) {
+      loadPage = () => readFile(filePath);
+    } else if (pageCount > 0) {
+      const convert = fromPath(filePath, { ...PDF_OPTIONS, savePath: workDir });
+      loadPage = async (index) => {
+        const res = (await convert(index + 1, { responseType: "buffer" })) as unknown as PdfPageResult;
+        const buf = await pageResultToBuffer(res);
+        if (!buf) throw new Error(`Page ${index + 1} could not be rendered from ${path.basename(filePath)}`);
+        return buf;
+      };
+    } else {
+      const all = await pdfToImageBuffers(filePath, workDir);
+      total = all.length;
+      loadPage = async (index) => all[index];
+    }
+
+    if (total === 0) {
       throw new Error(`No pages could be rendered from ${path.basename(filePath)}`);
     }
 
-    // Process pages in parallel batches — Tesseract runs as a subprocess so
-    // multiple instances can overlap. Order is preserved by index.
-    const PAGE_CONCURRENCY = 3;
-    const pageTexts = new Array<string>(pageImages.length);
+    const pageTexts = new Array<string>(total);
     let completed = 0;
 
-    for (let start = 0; start < pageImages.length; start += PAGE_CONCURRENCY) {
-      const batchIndices = Array.from(
-        { length: Math.min(PAGE_CONCURRENCY, pageImages.length - start) },
-        (_, j) => start + j,
-      );
-      await Promise.all(
-        batchIndices.map(async (i) => {
-          const processed = await preprocess(pageImages[i]);
-          const pagePath = path.join(workDir, `clean-${i}.png`);
-          await writeFile(pagePath, processed);
-          const text = await tesseract.recognize(pagePath, TESSERACT_CONFIG);
-          pageTexts[i] = cleanOcrText(text.trim());
-          completed++;
-          await onProgress?.(completed / pageImages.length);
-        }),
-      );
+    const recognizePage = async (i: number) => {
+      const image = await loadPage(i);
+      const processed = await preprocess(image);
+      const pagePath = path.join(workDir, `clean-${i}.png`);
+      await writeFile(pagePath, processed);
+      const text = await tesseract.recognize(pagePath, TESSERACT_CONFIG);
+      await rm(pagePath, { force: true }).catch(() => undefined);
+      pageTexts[i] = cleanOcrText(text.trim());
+      completed++;
+      await onProgress?.(completed / total);
+    };
+
+    // Tesseract runs as a subprocess, so a few pages can overlap on big machines.
+    // Order is preserved by index.
+    await onProgress?.(0.01); // show that work has started before the first page finishes
+    for (let start = 0; start < total; start += PAGE_CONCURRENCY) {
+      const batch = Array.from({ length: Math.min(PAGE_CONCURRENCY, total - start) }, (_, j) => start + j);
+      await Promise.all(batch.map(recognizePage));
     }
 
     return pageTexts;
